@@ -2,6 +2,8 @@ package com.fergusonconsultancy.solco
 
 import android.app.Activity
 import android.app.WallpaperManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.hardware.Sensor
@@ -28,6 +30,9 @@ class SettingsActivity : Activity() {
     private lateinit var lunaNote: TextView
     private lateinit var action: TextView
     private lateinit var diag: TextView
+    private lateinit var diagHead: TextView
+    private lateinit var crashCard: LinearLayout
+    private lateinit var crashText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +47,21 @@ class SettingsActivity : Activity() {
         col.addView(label("Grain and light that move only when something moves them.", 14.5f, Palette.MUTED).apply {
             setPadding(0, px(8), 0, px(22))
         })
+
+        // A failure, if one was recorded: said plainly, with its report one tap from being shared
+        crashText = label("", 13f, Palette.MUTED)
+        crashCard = card().apply {
+            setPadding(px(18), px(16), px(18), px(16))
+            addView(label("Solco hit a problem", 16f, Palette.IVORY, 500))
+            addView(crashText.apply { setPadding(0, px(6), 0, px(14)) })
+            addView(LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(button("Copy report") { copyReport() }, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(button("Dismiss", primary = false) { Crash.clear(this@SettingsActivity); syncCrash() },
+                    LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = px(10) })
+            })
+        }
+        col.addView(crashCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(20) })
 
         // The wallpaper, live, in this screen's own shape
         val bounds = windowManager.currentWindowMetrics.bounds
@@ -104,6 +124,7 @@ class SettingsActivity : Activity() {
 
         // Diagnostics, folded away
         val head = eyebrow("Diagnostics  +").apply { setTextColor(Palette.MUTED) }
+        diagHead = head
         diag = label("", 12.5f, Palette.MUTED).apply { visibility = View.GONE; setPadding(px(4), 0, 0, 0) }
         head.setOnClickListener {
             diag.visibility = if (diag.visibility == View.GONE) View.VISIBLE else View.GONE
@@ -129,6 +150,24 @@ class SettingsActivity : Activity() {
         else "Now: ${Sky.phaseName(sky.phase)}."
         syncTronco()
         fillDiag()
+        syncCrash()
+    }
+
+    private fun syncCrash() {
+        val r = Crash.report(this)
+        crashCard.visibility = if (r == null) View.GONE else View.VISIBLE
+        if (r != null) {
+            crashText.text = r.lines().getOrNull(2)?.let { "$it. Copy the report and send it over, then try again." } ?: "Copy the report and send it over."
+            // Diagnostics open themselves when something went wrong
+            diag.visibility = View.VISIBLE
+            diagHead.text = "DIAGNOSTICS  \u2212"
+            fillDiag()
+        }
+    }
+
+    private fun copyReport() {
+        val text = (Crash.report(this) ?: "") + "\n\n" + diag.text
+        getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Solco report", text))
     }
 
     private fun pickStyle(s: Style) {
@@ -172,6 +211,10 @@ class SettingsActivity : Activity() {
             "Main screen: " + (p.getString("seen_main", null) ?: "not drawn yet"),
             "Hinge sensor: " + if (hinge) "present" else "absent",
             "Last fold: " + (p.getString("last_fold", null) ?: "none yet"),
+            "Drawn on the cover: " + (Crash.get(this, "drew_cover") ?: "never"),
+            "Drawn on the main screen: " + (Crash.get(this, "drew_main") ?: "never"),
+            "GPU: " + (Crash.get(this, "gpu") ?: "not seen yet"),
+            "GPU problem: " + (Crash.get(this, "gl_error") ?: "none"),
             "Tronco record began: " + Growth.start(this),
         ).joinToString("\n")
     }

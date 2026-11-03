@@ -47,13 +47,23 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     private var discSize = 0
     private var dot = 1f
 
+    private var failed = false
+    private var reported = false
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        runCatching {
+            val range = FloatArray(2); GLES20.glGetFloatv(GLES20.GL_ALIASED_POINT_SIZE_RANGE, range, 0)
+            val maxTex = IntArray(1); GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTex, 0)
+            Crash.gpu(ctx, "${GLES20.glGetString(GLES20.GL_RENDERER)}, ${GLES20.glGetString(GLES20.GL_VERSION)}, " +
+                "points ${range[0].roundToInt()} to ${range[1].roundToInt()} px, textures to ${maxTex[0]} px")
+        }
         progPts = program(PTS_V, PTS_F)
         progTex = program(TEX_V, TEX_F)
         GLES20.glGenBuffers(2, vbo, 0)
         GLES20.glGenTextures(2, tex, 0)
         dirtyBuild = true
         dirtySky = true
+        failed = false
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -64,7 +74,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     }
 
     /** The look changed in Settings. */
-    fun rebuild() { dirtyBuild = true }
+    fun rebuild() { dirtyBuild = true; failed = false }
 
     /** The minute changed, or the wallpaper came back into view. */
     fun refresh() {
@@ -128,7 +138,27 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        if (dirtyBuild) build()
+        if (failed) { clearToGround(); return }
+        try {
+            frame()
+        } catch (t: Throwable) {
+            // Never take the process down: record what failed and show the plain ground instead
+            failed = true
+            Crash.save(ctx, "Drawing the wallpaper (${w}x$h)", t)
+            Crash.glError(ctx, t.toString())
+            Log.e(TAG, "frame failed", t)
+            clearToGround()
+        }
+    }
+
+    private fun clearToGround() {
+        val g = finish.ground
+        GLES20.glClearColor(((g shr 16) and 0xFF) / 255f, ((g shr 8) and 0xFF) / 255f, (g and 0xFF) / 255f, 1f)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+    }
+
+    private fun frame() {
+        if (dirtyBuild) { build(); reported = false }
         val s = scene ?: return
         if (dirtySky) paintSky()
         val now = SystemClock.uptimeMillis()
@@ -169,6 +199,12 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         val half = discSize / 2f
         drawQuad(tex[1], disc[0] - half, disc[1] - half, disc[0] + half, disc[1] + half)
 
+        if (!reported) {
+            reported = true
+            val err = GLES20.glGetError()
+            if (err != GLES20.GL_NO_ERROR) Crash.glError(ctx, "GL error 0x${Integer.toHexString(err)} on the first frame, ${w}x$h")
+            Crash.drew(ctx, s.cover, "${w}x$h, ${s.n} grains")
+        }
         if (moving) wake.run()
     }
 
@@ -210,7 +246,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             GLES20.glCompileShader(s)
             val ok = IntArray(1)
             GLES20.glGetShaderiv(s, GLES20.GL_COMPILE_STATUS, ok, 0)
-            if (ok[0] == 0) Log.e(TAG, "shader: " + GLES20.glGetShaderInfoLog(s))
+            if (ok[0] == 0) { val log = GLES20.glGetShaderInfoLog(s); Log.e(TAG, "shader: $log"); Crash.glError(ctx, "Shader did not compile: $log") }
             return s
         }
         val p = GLES20.glCreateProgram()
@@ -219,7 +255,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         GLES20.glLinkProgram(p)
         val ok = IntArray(1)
         GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, ok, 0)
-        if (ok[0] == 0) Log.e(TAG, "link: " + GLES20.glGetProgramInfoLog(p))
+        if (ok[0] == 0) { val log = GLES20.glGetProgramInfoLog(p); Log.e(TAG, "link: $log"); Crash.glError(ctx, "Program did not link: $log") }
         return p
     }
 

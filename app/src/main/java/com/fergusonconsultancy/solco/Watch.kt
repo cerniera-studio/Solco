@@ -145,3 +145,41 @@ object Diag {
         Prefs.of(c).edit().putString("last_fold", "$s, ${stamp()}").apply()
     }
 }
+
+/**
+ * Failures, kept so they can be read on the phone. A crash anywhere in the app is written before
+ * the process ends; a GPU failure is caught, written, and the wallpaper falls back to its ground.
+ */
+object Crash {
+    private const val NAME = "solco_crash"
+    private fun store(c: Context) = c.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+    private fun stamp() = SimpleDateFormat("HH:mm:ss, d MMM", Locale.UK).format(Date())
+
+    fun install(c: Context) {
+        val app = c.applicationContext
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            runCatching { save(app, "Crash on ${t.name}", e) }
+            previous?.uncaughtException(t, e)
+        }
+    }
+
+    /** Written at once (commit, not apply), because the process may be about to end. */
+    @JvmStatic fun save(c: Context, where: String, e: Throwable) {
+        val trace = android.util.Log.getStackTraceString(e).lines().take(40).joinToString("\n")
+        val report = "Solco ${runCatching { c.packageManager.getPackageInfo(c.packageName, 0).versionName }.getOrNull()}\n" +
+            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}\n" +
+            "$where, ${stamp()}\n\n$trace"
+        store(c).edit().putString("report", report).commit()
+    }
+
+    fun report(c: Context): String? = store(c).getString("report", null)
+    fun clear(c: Context) { store(c).edit().remove("report").commit() }
+
+    /** GPU facts and the first frame drawn on each screen, for Diagnostics. */
+    fun gpu(c: Context, s: String) { store(c).edit().putString("gpu", s).apply() }
+    fun drew(c: Context, tall: Boolean, s: String) { store(c).edit().putString(if (tall) "drew_cover" else "drew_main", "$s, ${stamp()}").apply() }
+    fun glError(c: Context, s: String) { store(c).edit().putString("gl_error", "$s, ${stamp()}").commit() }
+    fun get(c: Context, key: String): String? = store(c).getString(key, null)
+    fun stampNow() = stamp()
+}
