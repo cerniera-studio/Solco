@@ -11,6 +11,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.time.LocalDate
+import java.util.concurrent.Executors
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
@@ -57,6 +58,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             Crash.gpu(ctx, "${GLES20.glGetString(GLES20.GL_RENDERER)}, ${GLES20.glGetString(GLES20.GL_VERSION)}, " +
                 "points ${range[0].roundToInt()} to ${range[1].roundToInt()} px, textures to ${maxTex[0]} px")
         }
+        finish = Prefs.finish(ctx)
         progPts = program(PTS_V, PTS_F)
         progTex = program(TEX_V, TEX_F)
         GLES20.glGenBuffers(2, vbo, 0)
@@ -87,44 +89,80 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
 
     fun touch(x: Float, y: Float, down: Boolean) { scene?.touch(x, y, down) }
 
-    private fun build() {
-        if (w <= 0 || h <= 0) return
-        val style = Prefs.style(ctx)
-        finish = Prefs.finish(ctx)
-        val dp = ctx.resources.displayMetrics.density
-        val s = Scene(w, h, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0))
-        scene = s
-        dot = max(1f, (dp * 1.05f).roundToInt().toFloat())
+    /** Everything a look needs, made away from the GL thread so the first frame never waits for it. */
+    private class Prepared(val w: Int, val h: Int, val scene: Scene, val finish: Finish, val cols: FloatArray, val back: Bitmap, val ms: Long)
 
-        val cols = FloatArray(s.n * 4)
-        for (i in 0 until s.n) {
-            val c = finish.grain[s.col[i].toInt()]
-            cols[4 * i] = ((c shr 16) and 0xFF) / 255f
-            cols[4 * i + 1] = ((c shr 8) and 0xFF) / 255f
-            cols[4 * i + 2] = (c and 0xFF) / 255f
-            cols[4 * i + 3] = s.hash[i]
+    private val worker = Executors.newSingleThreadExecutor()
+    @Volatile private var ready: Prepared? = null
+    @Volatile private var building = false
+
+    /**
+     * Starts building the look for the current size on a worker thread. Android holds the system's
+     * thread until the first frame is drawn, so the GL thread shows the plain ground at once and
+     * the grain arrives when it is ready, a fraction of a second later.
+     */
+    private fun startBuild() {
+        if (w <= 0 || h <= 0 || building) return
+        building = true
+        dirtyBuild = false
+        val bw = w; val bh = h
+        worker.execute {
+            try {
+                val t0 = SystemClock.elapsedRealtime()
+                val style = Prefs.style(ctx)
+                val f = Prefs.finish(ctx)
+                val dp = ctx.resources.displayMetrics.density
+                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0))
+                val cols = FloatArray(sc.n * 4)
+                for (i in 0 until sc.n) {
+                    val c = f.grain[sc.col[i].toInt()]
+                    cols[4 * i] = ((c shr 16) and 0xFF) / 255f
+                    cols[4 * i + 1] = ((c shr 8) and 0xFF) / 255f
+                    cols[4 * i + 2] = (c and 0xFF) / 255f
+                    cols[4 * i + 3] = sc.hash[i]
+                }
+                val back = Backdrop.paint(sc, f)
+                ready = Prepared(bw, bh, sc, f, cols, back, SystemClock.elapsedRealtime() - t0)
+            } catch (t: Throwable) {
+                Crash.save(ctx, "Building the wallpaper (${bw}x$bh)", t)
+                Crash.glError(ctx, "Build failed: $t")
+                Log.e(TAG, "build failed", t)
+            } finally {
+                building = false
+            }
+            wake.run()
         }
-        val cb = ByteBuffer.allocateDirect(cols.size.coerceAtLeast(1) * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
-        cb.put(cols).position(0)
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo[1])
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, cols.size * 4, cb, GLES20.GL_STATIC_DRAW)
+    }
 
+    /** On the GL thread: hand a finished build to the GPU. */
+    private fun install(p: Prepared) {
+        ready = null
+        if (p.w != w || p.h != h) { p.back.recycle(); dirtyBuild = true; return }   // the screen changed meanwhile
+        val s = p.scene
+        finish = p.finish
+        dot = max(1f, (s.dp * 1.05f).roundToInt().toFloat())
+        val cb = ByteBuffer.allocateDirect(p.cols.size.coerceAtLeast(1) * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        cb.put(p.cols).position(0)
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo[1])
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, p.cols.size * 4, cb, GLES20.GL_STATIC_DRAW)
         posArr = FloatArray(s.n * 2)
         posBuf = ByteBuffer.allocateDirect(posArr.size.coerceAtLeast(1) * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo[0])
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, posArr.size * 4, null, GLES20.GL_DYNAMIC_DRAW)
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
-
-        val back = Backdrop.paint(s, finish)
-        upload(tex[0], back)
-        back.recycle()
-
+        upload(tex[0], p.back)
+        p.back.recycle()
+        // A stir asked for while the grain was being made applies to the new grain
+        scene = s
         builtAt = SystemClock.elapsedRealtime()
         builtDay = LocalDate.now()
-        dirtyBuild = false
         dirtySky = true
-        Log.d(TAG, "built ${style.name} ${finish.name} ${w}x$h, ${s.n} grains, cover=${s.cover}")
+        reported = false
+        lastBuildMs = p.ms
+        Log.d(TAG, "built ${s.style.name} ${finish.name} ${w}x$h, ${s.n} grains in ${p.ms} ms, cover=${s.cover}")
     }
+
+    private var lastBuildMs = 0L
 
     private fun paintSky() {
         val s = scene ?: return
@@ -158,8 +196,9 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     }
 
     private fun frame() {
-        if (dirtyBuild) { build(); reported = false }
-        val s = scene ?: return
+        ready?.let { install(it) }
+        if (dirtyBuild) startBuild()
+        val s = scene?.takeIf { it.w == w && it.h == h } ?: run { clearToGround(); return }
         if (dirtySky) paintSky()
         val now = SystemClock.uptimeMillis()
         if (pendingStir != 0) {
@@ -203,7 +242,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             reported = true
             val err = GLES20.glGetError()
             if (err != GLES20.GL_NO_ERROR) Crash.glError(ctx, "GL error 0x${Integer.toHexString(err)} on the first frame, ${w}x$h")
-            Crash.drew(ctx, s.cover, "${w}x$h, ${s.n} grains")
+            Crash.drew(ctx, s.cover, "${w}x$h, ${s.n} grains, built in $lastBuildMs ms")
         }
         if (moving) wake.run()
     }
