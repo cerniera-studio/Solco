@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solco · live wallpaper preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Italiana&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#F6F1E6;--muted:rgba(246,241,230,.62);--champ:#D9BB86;--panel:rgba(14,19,17,.80);--line:rgba(217,187,134,.28)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#070908;color:var(--ink);font-family:Jost,system-ui,sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    padding:max(14px,env(safe-area-inset-top)) 14px max(14px,env(safe-area-inset-bottom))}
+  #stage{position:relative;border-radius:26px;overflow:hidden;box-shadow:0 0 0 1px rgba(217,187,134,.14),0 30px 80px rgba(0,0,0,.6);
+    touch-action:none;transition:width .75s cubic-bezier(.65,0,.35,1),height .75s cubic-bezier(.65,0,.35,1),background .4s}
+  canvas{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:block}
+  #crease{position:absolute;top:0;bottom:0;left:50%;width:1px;background:linear-gradient(transparent,rgba(217,187,134,.18) 20%,rgba(217,187,134,.18) 80%,transparent);opacity:0;transition:opacity .5s}
+  .main #crease{opacity:1}
+  #panel{position:absolute;left:10px;right:10px;bottom:10px;padding:14px 14px 12px;border-radius:20px;max-height:calc(100% - 20px);overflow:auto;
+    background:var(--panel);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);
+    border:1px solid var(--line);transform:translateY(calc(100% + 20px));opacity:0;
+    transition:transform .5s cubic-bezier(.2,.8,.2,1),opacity .4s}
+  #panel.on{transform:none;opacity:1}
+  .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  .name{font-family:Italiana,serif;font-size:30px;letter-spacing:.02em}
+  .clock{font-size:12.5px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+  .row{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .row[hidden]{display:none}
+  .lab{flex:0 0 62px;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .seg{flex:1;display:flex;position:relative;background:rgba(246,241,230,.06);border-radius:12px;padding:3px;min-width:0}
+  .seg button{flex:1;min-width:0;position:relative;z-index:1;border:0;background:none;color:var(--muted);font:500 13px Jost,sans-serif;
+    padding:8px 0;border-radius:9px;cursor:pointer;transition:color .3s;white-space:nowrap;overflow:hidden}
+  .seg button.sel{color:#0E1311;font-weight:600}
+  .thumb{position:absolute;top:3px;bottom:3px;border-radius:9px;background:var(--champ);
+    transition:left .32s cubic-bezier(.2,.8,.2,1),right .36s cubic-bezier(.2,.8,.2,1)}
+  input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:28px;background:none}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:rgba(246,241,230,.18)}
+  input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:rgba(246,241,230,.18)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-7.5px;border-radius:50%;background:var(--champ);border:0}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--champ);border:0}
+  .mini{flex:0 0 auto;border:1px solid var(--line);background:none;color:var(--champ);font:600 10.5px Jost,sans-serif;letter-spacing:.14em;text-transform:uppercase;padding:7px 9px;border-radius:9px;cursor:pointer;min-width:54px;font-variant-numeric:tabular-nums}
+  .mini.on{background:var(--champ);color:#0E1311}
+  .note{margin-top:10px;font-size:12.5px;line-height:1.45;color:var(--muted)}
+  #hint{position:absolute;left:0;right:0;top:18px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(246,241,230,.6);transition:opacity .6s;pointer-events:none}
+  .light #hint{color:rgba(30,36,48,.6)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="crease"></div>
+    <div id="hint">Touch the grain · hold for controls</div>
+    <div id="panel">
+      <div class="head"><div class="name" id="styleName">Solco</div><div class="clock" id="clock"></div></div>
+      <div class="row"><div class="lab">Style</div>
+        <div class="seg" data-k="style"><div class="thumb"></div><button data-v="solco">Solco</button><button data-v="duna">Duna</button><button data-v="tronco">Tronco</button><button data-v="marea">Marea</button></div></div>
+      <div class="row"><div class="lab">Finish</div>
+        <div class="seg" data-k="finish"><div class="thumb"></div><button data-v="visconti">Visconti</button><button data-v="avorio">Avorio</button><button data-v="carbonio">Carbonio</button><button data-v="rosso">Rosso</button></div></div>
+      <div class="row"><div class="lab">Screen</div>
+        <div class="seg" data-k="screen"><div class="thumb"></div><button data-v="cover">Cover</button><button data-v="main">Unfold</button></div></div>
+      <div class="row"><div class="lab">Fold</div>
+        <div class="seg" data-k="speed"><div class="thumb"></div><button data-v="slow">Slow</button><button data-v="fast">Fast</button></div></div>
+      <div class="row"><div class="lab">Time</div>
+        <input type="range" id="time" min="0" max="1440" step="5"><button class="mini" id="nowBtn">Now</button></div>
+      <div class="row" data-when="night"><div class="lab">Luna</div>
+        <div class="seg" data-k="luna"><div class="thumb"></div><button data-v="off">Full disc</button><button data-v="on">True phase</button></div></div>
+      <div class="row" data-when="duna"><div class="lab">Tilt</div>
+        <input type="range" id="tilt" min="-100" max="100" value="0"><button class="mini" id="levelBtn">Level</button></div>
+      <div class="row" data-when="tronco"><div class="lab">Days</div>
+        <input type="range" id="days" min="1" max="120" value="30"><button class="mini" id="daysVal" tabindex="-1">30</button></div>
+      <div class="row" data-when="marea"><div class="lab">Battery</div>
+        <input type="range" id="charge" min="5" max="100" value="64"><button class="mini" id="chargeBtn">Plug in</button></div>
+      <div class="note" id="note"></div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const stage=$('stage'),cv=$('c'),ctx=cv.getContext('2d'),panel=$('panel'),hint=$('hint');
+const S={style:'solco',finish:'visconti',screen:'cover',speed:'slow',luna:'on',minutes:null,tilt:0,days:30,level:.64,charging:false};
+
+const FIN={
+  visconti:{ground:[14,19,17],groove:[217,187,134],grooveA:.10,grain:[[217,187,134],[246,241,230],[150,128,92]],grainA:.72,
+    discDay:[236,224,200],discNight:[201,160,100],speck:[14,19,17],light:false},
+  avorio:{ground:[236,230,218],groove:[30,36,48],grooveA:.42,grain:[[30,42,58],[166,58,42],[90,98,112]],grainA:.9,
+    discDay:[176,52,38],discNight:[110,22,26],speck:[236,230,218],light:true},
+  carbonio:{ground:[11,11,12],groove:[246,241,230],grooveA:.08,grain:[[226,222,214],[178,56,42],[118,118,122]],grainA:.78,
+    discDay:[240,236,228],discNight:[206,178,138],speck:[11,11,12],light:false},
+  rosso:{ground:[54,13,15],groove:[217,187,134],grooveA:.10,grain:[[217,187,134],[246,241,230],[150,42,38]],grainA:.76,
+    discDay:[240,228,206],discNight:[210,170,110],speck:[54,13,15],light:false}
+};
+const NOTES={
+  solco:'Rings centre on the hinge. Folding stirs the grain along the swing; a fast fold leaves the bands emptier.',
+  duna:'Ripples lie as the wind left them. Tilt the phone and the loosest grains slide downhill and pool at the edge; level it and they creep back. On the phone, tilt comes from the motion sensor, read only while the screen is on.',
+  tronco:'One ring a day, as wide as that day’s unfolded use: pale early grain, then a dense line where the day closed. The newest ring is still growing. The preview simulates the days.',
+  marea:'The tide is the battery. On charge it rises and its surface breathes, the only constant motion in Solco, allowed because the phone is plugged in.'
+};
+
+let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646};
+
+let W,H,dpr,cx,cy,R,img,base,buf,N,hx,hy,ox,oy,vx,vy,col,hsh,kick,kickAt,mx,md,discC;
+let emptyE=0,active=false,last=0,ptr=null,hideT=0,levelShown=S.level,wavePh=0;
+
+function size(){
+  const vw=innerWidth-28,vh=innerHeight-28, ar=S.screen==='cover'?9/21:1.1; // approximate Fold proportions
+  let h=Math.min(vh,vw/ar),w=h*ar; if(w>vw){w=vw;h=w/ar} return [Math.round(w),Math.round(h)];
+}
+function alloc(n){hx=new Float32Array(n);hy=new Float32Array(n);ox=new Float32Array(n);oy=new Float32Array(n);
+  vx=new Float32Array(n);vy=new Float32Array(n);col=new Uint8Array(n);hsh=new Float32Array(n);kick=new Float32Array(n);kickAt=new Float32Array(n);
+  mx=new Float32Array(n);md=new Float32Array(n)}
+
+function build(){
+  const [w,h]=size(); stage.style.width=w+'px'; stage.style.height=h+'px';
+  dpr=Math.min(devicePixelRatio||1,2); W=Math.round(w*dpr); H=Math.round(h*dpr);
+  cv.width=W; cv.height=H; cv.style.width=w+'px'; cv.style.height=h+'px';
+  const f=FIN[S.finish]; stage.style.background=`rgb(${f.ground})`; document.body.classList.toggle('light',f.light);
+  if(S.screen==='cover'){cx=0;cy=H/2}else{cx=W/2;cy=H/2}
+  R=Math.hypot(Math.max(cx,W-cx),Math.max(cy,H-cy));
+  const off=document.createElement('canvas');off.width=W;off.height=H;const o=off.getContext('2d');
+  o.fillStyle=`rgb(${f.ground})`;o.fillRect(0,0,W,H);
+  if(S.style==='solco'){ o.lineWidth=Math.max(1,.6*dpr); seed=11;
+    for(let r=R*.06;r<R*.40;r+=(3.2+rnd()*2.4)*dpr){const t=(r/R-.06)/.34;
+      o.strokeStyle=`rgba(${f.groove},${f.grooveA*(.35+.65*Math.pow(t,1.4))})`;o.beginPath();o.arc(cx,cy,r,0,Math.PI*2);o.stroke();}
+  }
+  img=o.getImageData(0,0,W,H); base=new Uint8ClampedArray(img.data); buf=img.data;
+  const cap=Math.min(90000,Math.round((W/dpr)*(H/dpr)/4.2)); alloc(cap);
+  N=({solco:genSolco,duna:genDuna,tronco:genTronco,marea:genMarea})[S.style](cap);
+  drawDisc(); render(); sync();
+}
+
+/* ---- Solco: bands of grain round the hinge ---- */
+function genSolco(cap){
+  const bands=S.screen==='cover'?[[.40,.52,.55,0],[.58,.74,.9,1],[.79,.86,.6,2],[.90,1.02,1,0]]:[[.40,.50,.5,0],[.55,.70,.85,1],[.76,.84,.6,2],[.88,1.02,1,0]];
+  const wsum=bands.reduce((a,b)=>a+(b[1]-b[0])*b[2],0); seed=29; let n=0,g=0;
+  while(n<cap&&g<cap*40){g++;
+    let u=rnd()*wsum,b=bands[0];for(const bb of bands){const m=(bb[1]-bb[0])*bb[2];if(u<m){b=bb;break}u-=m}
+    const t=rnd(); if(rnd()>Math.pow(t,1.8)*.92+.08) continue;
+    const r=R*(b[0]+(b[1]-b[0])*t)+(rnd()-.5)*2*dpr,a=rnd()*6.2832,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+    if(x<0||y<0||x>=W||y>=H) continue;
+    hx[n]=x;hy[n]=y;const p=rnd();col[n]=p<.72?b[3]:(p<.9?(b[3]+1)%3:(b[3]+2)%3);hsh[n]=rnd();n++;}
+  return n;
+}
+/* ---- Duna: wind ripples, steep on the lee side, under a long dune swell ---- */
+function genDuna(cap){
+  seed=43; let n=0,g=0; const lam=26*dpr, A=-.32;
+  const ca=Math.cos(A),sa=Math.sin(A);
+  while(n<cap&&g<cap*30){g++;
+    const x=rnd()*W,y=rnd()*H;
+    const p=(y*ca+x*sa)/lam+.9*Math.sin(x/(170*dpr))+.5*Math.sin(y/(260*dpr)+1.3);
+    const fr=p-Math.floor(p), crest=fr<.78?Math.pow(fr/.78,2.4):Math.pow((1-fr)/.22,1.1);
+    const swell=.30+.70*Math.pow(.5+.5*Math.sin(y/H*Math.PI*2.1+x/W*1.4),1.5);
+    const d=.05+.95*crest*swell; if(rnd()>d) continue;
+    hx[n]=x;hy[n]=y;col[n]=crest>.55?0:(rnd()<.8?1:2);hsh[n]=rnd();n++;}
+  return n;
+}
+/* ---- Tronco: one ring per day, width from that day's use ---- */
+function genTronco(cap){
+  seed=61; const days=S.days, use=[];
+  for(let d=0;d<days;d++){const wk=(d%7===5||d%7===6)?.7:1; use.push((.35+.65*rnd())*wk)}
+  use[days-1]*=.45; // today's ring is still growing
+  const unit=R*.032, total=use.reduce((a,b)=>a+b,0)+1.2, sc=Math.min(unit,R*.97/total);
+  const edges=[1.2*sc]; for(const u of use) edges.push(edges[edges.length-1]+u*sc);
+  const Rr=edges[edges.length-1]*1.06; let n=0,g=0;
+  const wob=(a,r)=>1+.028*Math.sin(3*a+r/(R*.2))+.018*Math.sin(7*a+1.7)+.01*Math.sin(13*a+r/(R*.05));
+  while(n<cap&&g<cap*40){g++;
+    const a=rnd()*6.2832, rr=Math.sqrt(rnd())*Rr, x=cx+Math.cos(a)*rr*wob(a,rr), y=cy+Math.sin(a)*rr*wob(a,rr);
+    if(x<0||y<0||x>=W||y>=H) continue;
+    let dens,c;
+    if(rr<edges[0]){dens=.55;c=2} else {
+      let lo=0,hi=edges.length-1; while(hi-lo>1){const m=(lo+hi)>>1; if(edges[m]<=rr)lo=m;else hi=m}
+      if(hi>=edges.length||rr>=edges[edges.length-1]){dens=.85;c=0} // the bark line
+      else{const t=(rr-edges[lo])/(edges[hi]-edges[lo]); const late=t>.80?Math.pow((t-.80)/.20,.7):0;
+        dens=.10+.85*late; c=late>.3?0:(rnd()<.8?1:2);}
+    }
+    if(rnd()>dens) continue;
+    hx[n]=x;hy[n]=y;col[n]=c;hsh[n]=rnd();n++;}
+  return n;
+}
+/* ---- Marea: grain filled to the battery level ---- */
+function surf(x){return H*(1-levelShown)+6*dpr*Math.sin(x/(58*dpr)+wavePh)+3*dpr*Math.sin(x/(23*dpr)-wavePh*1.6)}
+function genMarea(cap){
+  seed=83; let n=0,g=0;
+  while(n<cap&&g<cap*20){g++;
+    const x=rnd()*W, d=rnd()*H;
+    const dens=d<5*dpr?.95:.18+.60*Math.min(1,d/(H*.35)); if(rnd()>dens) continue;
+    mx[n]=x;md[n]=d;hx[n]=x;hy[n]=surf(x)+d;col[n]=d<5*dpr?1:(rnd()<.75?0:2);hsh[n]=rnd();n++;}
+  return n;
+}
+function placeMarea(){for(let i=0;i<N;i++){hy[i]=surf(mx[i])+md[i]}}
+
+/* ---- the disc: sun by day, moon by night ---- */
+function minutesNow(){const d=new Date();return d.getHours()*60+d.getMinutes()}
+function mins(){return S.minutes==null?minutesNow():S.minutes}
+function sky(){const h=mins()/60,day=h>=6&&h<18;
+  return {day,alt:day?Math.sin(Math.PI*(h-6)/12):Math.sin(Math.PI*(((h-18)+24)%24)/12)}}
+function moonPhase(){const syn=29.530588853, ref=Date.UTC(2000,0,6,18,14);
+  const age=(((Date.now()-ref)/864e5)%syn+syn)%syn; return age/syn}
+function phaseName(p){const lit=Math.round((1-Math.cos(2*Math.PI*p))/2*100);
+  const n=p<.03||p>.97?'new moon':p<.22?'waxing crescent':p<.28?'first quarter':p<.47?'waxing gibbous':p<.53?'full moon':p<.72?'waning gibbous':p<.78?'last quarter':'waning crescent';
+  return `${n}, ${lit}% lit`}
+function drawDisc(){
+  const f=FIN[S.finish],{day,alt}=sky(), m=Math.min(W,H), rad=(S.screen==='cover'?.21:.11)*m;
+  const phi=(-60+120*alt)*Math.PI/180, ring=R*.30, x=cx+Math.cos(phi)*ring, y=cy-Math.sin(phi)*ring;
+  const c=day?f.discDay:f.discNight, dim=day?1:.82;
+  discC={x,y,rad,canvas:document.createElement('canvas')};
+  const s=Math.ceil(rad*2+4), dc=discC.canvas; dc.width=dc.height=s; const g=dc.getContext('2d'), k=s/2;
+  const phase=!day&&S.luna==='on'?moonPhase():null;
+  if(phase!=null){ // unlit limb, then the lit part
+    g.beginPath();g.arc(k,k,rad,0,6.2832);g.fillStyle=`rgba(${c},.13)`;g.fill();
+    g.beginPath(); const rx=rad*Math.abs(Math.cos(2*Math.PI*phase));
+    if(phase<.5){g.arc(k,k,rad,-Math.PI/2,Math.PI/2,false);g.ellipse(k,k,rx,rad,0,Math.PI/2,-Math.PI/2,phase<.25)}
+    else{g.arc(k,k,rad,Math.PI/2,3*Math.PI/2,false);g.ellipse(k,k,rx,rad,0,-Math.PI/2,Math.PI/2,phase>.75)}
+    g.closePath();g.fillStyle=`rgba(${c},${dim})`;g.fill();
+  } else {g.beginPath();g.arc(k,k,rad,0,6.2832);g.fillStyle=`rgba(${c},${dim})`;g.fill();}
+  g.save();g.beginPath();g.arc(k,k,rad,0,6.2832);g.clip(); seed=101;
+  const sp=Math.round(rad*rad/(5*dpr));
+  for(let i=0;i<sp;i++){const a=rnd()*6.283,r=Math.sqrt(rnd())*rad;
+    g.fillStyle=`rgba(${rnd()<.5?f.speck:[255,255,255]},${.05+rnd()*.10})`;
+    g.fillRect(k+Math.cos(a)*r,k+Math.sin(a)*r,Math.max(1,dpr),Math.max(1,dpr));}
+  const hl=g.createRadialGradient(k-rad*.45,k-rad*.5,0,k-rad*.45,k-rad*.5,rad*1.1);
+  hl.addColorStop(0,`rgba(255,250,240,${day?.16:.08})`);hl.addColorStop(1,'rgba(255,250,240,0)');
+  g.fillStyle=hl;g.fillRect(0,0,s,s);g.restore();
+  const hh=String(Math.floor(mins()/60)).padStart(2,'0'),mm=String(mins()%60).padStart(2,'0');
+  $('clock').textContent=`${hh}:${mm} · ${day?'sun':(S.luna==='on'?phaseName(moonPhase()):'moon')}`;
+  $('time').value=mins();
+}
+
+function render(){
+  const f=FIN[S.finish]; buf.set(base);
+  const sz=Math.max(1,Math.round(dpr*1.05)),E=emptyE,cols=f.grain,ga=f.grainA;
+  for(let i=0;i<N;i++){
+    let a=1; if(E>0){const d=(hsh[i]-E)/.08;a=d>=1?1:(d<=0?.25:.25+.75*d)}
+    const x=(hx[i]+ox[i])|0,y=(hy[i]+oy[i])|0; if(x<0||y<0||x>=W-sz||y>=H-sz) continue;
+    const c=cols[col[i]],al=a*ga;
+    for(let dy=0;dy<sz;dy++){let p=((y+dy)*W+x)*4;
+      for(let dx=0;dx<sz;dx++,p+=4){buf[p]+=(c[0]-buf[p])*al;buf[p+1]+=(c[1]-buf[p+1])*al;buf[p+2]+=(c[2]-buf[p+2])*al}}
+  }
+  ctx.putImageData(img,0,0);
+  ctx.drawImage(discC.canvas,discC.x-discC.canvas.width/2,discC.y-discC.canvas.height/2);
+}
+
+/* ---- physics ---- */
+function step(now){
+  const dt=Math.min(2.5,(now-last)/16.67); last=now;
+  const duna=S.style==='duna', marea=S.style==='marea';
+  let energy=0;
+  if(marea){
+    if(S.charging){S.level=Math.min(1,S.level+.0009*dt); $('charge').value=Math.round(S.level*100); if(S.level>=1){S.charging=false;syncCharge()}}
+    const prev=levelShown; levelShown+=(S.level-levelShown)*.08*dt; if(S.charging) wavePh+=.018*dt;
+    if(Math.abs(levelShown-prev)>1e-5||S.charging){placeMarea(); energy=1} labelBattery();
+  }
+  const k=(duna?.0007:.010)*dt, damp=Math.pow(duna?.955:.915,dt);
+  const g=S.tilt/100, gx=g*.06*dpr, gy=Math.abs(g)*.035*dpr;
+  for(let i=0;i<N;i++){
+    if(kick[i]!==0&&now>=kickAt[i]){
+      if(duna||marea){vx[i]+=kick[i]}
+      else{const dx=hx[i]-cx,dy=hy[i]-cy,r=Math.hypot(dx,dy)||1;vx[i]+=-dy/r*kick[i];vy[i]+=dx/r*kick[i]}
+      kick[i]=0; energy=1;
+    }
+    let ax=-ox[i]*k, ay=-oy[i]*k;
+    let slide=false;
+    if(duna&&Math.abs(g)>.45+hsh[i]*1.1){const fr=1.25-hsh[i]*1.5;ax+=gx*dt*fr*fr;ay+=gy*dt*fr*fr;slide=true} // only grains past their angle of repose slide, the loosest fastest
+    vx[i]=(vx[i]+ax)*damp; vy[i]=(vy[i]+ay)*damp;
+    if(slide){const vm=1.3*dpr*(1.15-hsh[i]); if(vx[i]>vm)vx[i]=vm; else if(vx[i]<-vm)vx[i]=-vm; if(vy[i]>vm*.6)vy[i]=vm*.6}
+    ox[i]+=vx[i]*dt; oy[i]+=vy[i]*dt;
+    if(duna){const X=hx[i]+ox[i],Y=hy[i]+oy[i]; // pool against the screen's edges
+      if(X<1){ox[i]=1-hx[i];vx[i]=0} else if(X>W-3){ox[i]=W-3-hx[i];vx[i]=0}
+      if(Y>H-3){oy[i]=H-3-hy[i];vy[i]=0}}
+    if(kick[i]!==0) energy=1;
+    const e=Math.abs(vx[i])+Math.abs(vy[i])+(duna?0:(Math.abs(ox[i])+Math.abs(oy[i]))*.01);
+    if(e>energy) energy=e;
+  }
+  if(emptyE>0){if(energy<1.2) emptyE*=Math.pow(.95,dt); if(emptyE<.01) emptyE=0}
+  render();
+  if(energy>.02||ptr||emptyE>0) requestAnimationFrame(step); else active=false; // at rest nothing redraws
+}
+function wake(){if(!active){active=true;last=performance.now();requestAnimationFrame(step)}}
+function stir(dir){
+  const fast=S.speed==='fast',now=performance.now(),flat=S.style==='duna'||S.style==='marea';
+  const K=(fast?7.5:4.2)*dpr*dir*(flat?.8:1), spread=fast?260:520;
+  for(let i=0;i<N;i++){
+    const t=flat?Math.abs(hx[i]-cx)/Math.max(1,W-cx):Math.hypot(hx[i]-cx,hy[i]-cy)/R;
+    kick[i]=K*(.35+.65*t)*(.85+.3*hsh[i]); kickAt[i]=now+(1-t)*spread;}
+  emptyE=fast?.75:0; wake();
+}
+function push(e){
+  const b=cv.getBoundingClientRect(),px=(e.clientX-b.left)*dpr,py=(e.clientY-b.top)*dpr;
+  const rho=64*dpr,rho2=rho*rho,mvx=ptr?px-ptr.x:0,mvy=ptr?py-ptr.y:0;
+  for(let i=0;i<N;i++){const dx=hx[i]+ox[i]-px,dy=hy[i]+oy[i]-py,d2=dx*dx+dy*dy; if(d2>rho2) continue;
+    const d=Math.sqrt(d2)||1,f=Math.pow(1-d/rho,2); vx[i]+=dx/d*f*2.2*dpr+mvx*f*.18; vy[i]+=dy/d*f*2.2*dpr+mvy*f*.18;}
+  ptr={x:px,y:py}; wake();
+}
+let holdT=0;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);push(e);hint.style.opacity=0;holdT=setTimeout(showPanel,420)});
+cv.addEventListener('pointermove',e=>{if(ptr){push(e);if(holdT){clearTimeout(holdT);holdT=0}}});
+const up=()=>{ptr=null;if(holdT){clearTimeout(holdT);holdT=0}};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+
+/* ---- controls: hidden in the trim, options only where they apply ---- */
+function showPanel(){panel.classList.add('on');clearTimeout(hideT);hideT=setTimeout(()=>panel.classList.remove('on'),3200)}
+panel.addEventListener('pointerdown',e=>{e.stopPropagation();showPanel()});
+panel.addEventListener('input',showPanel);
+function sync(){
+  const night=!sky().day;
+  document.querySelectorAll('[data-when]').forEach(r=>{const w=r.dataset.when; r.hidden=!(w==='night'?night:w===S.style)});
+  $('styleName').textContent=S.style[0].toUpperCase()+S.style.slice(1);
+  $('note').textContent=NOTES[S.style];
+}
+function setSeg(seg,v){const btns=[...seg.querySelectorAll('button')],i=btns.findIndex(b=>b.dataset.v===v),th=seg.querySelector('.thumb'),n=btns.length;
+  btns.forEach((b,j)=>b.classList.toggle('sel',j===i)); th.style.left=`calc(${i/n*100}% + 3px)`; th.style.right=`calc(${(n-1-i)/n*100}% + 3px)`}
+document.querySelectorAll('.seg').forEach(seg=>{const k=seg.dataset.k; setSeg(seg,S[k]);
+  seg.addEventListener('click',e=>{const b=e.target.closest('button'); if(!b||S[k]===b.dataset.v) return;
+    S[k]=b.dataset.v; setSeg(seg,S[k]); showPanel();
+    if(k==='screen'){stage.classList.toggle('main',S.screen==='main');build();stir(S.screen==='main'?1:-1)}
+    else if(k==='speed') stir(1);
+    else if(k==='luna'){drawDisc();render()}
+    else build();
+  })});
+$('time').addEventListener('input',()=>{S.minutes=+$('time').value;drawDisc();render();sync()});
+$('nowBtn').addEventListener('click',()=>{S.minutes=null;drawDisc();render();sync()});
+$('tilt').addEventListener('input',()=>{S.tilt=+$('tilt').value;wake()});
+$('levelBtn').addEventListener('click',()=>{S.tilt=0;$('tilt').value=0;wake()});
+$('days').addEventListener('input',()=>{S.days=+$('days').value;$('daysVal').textContent=S.days;clearTimeout(dT);dT=setTimeout(build,60)});let dT;
+$('charge').addEventListener('input',()=>{S.level=+$('charge').value/100;wake()});
+function syncCharge(){$('chargeBtn').classList.toggle('on',S.charging);$('chargeBtn').textContent=S.charging?'Charging':'Plug in'}
+function labelBattery(){if(S.style==='marea') $('clock').textContent=`Battery ${Math.round(S.level*100)}%${S.charging?' · charging':''}`}
+$('chargeBtn').addEventListener('click',()=>{S.charging=!S.charging;syncCharge();wake()});
+// use the real battery where the browser allows it
+try{navigator.getBattery&&navigator.getBattery().then(bt=>{const r=()=>{S.level=Math.max(.05,bt.level);S.charging=bt.charging;$('charge').value=Math.round(S.level*100);syncCharge();if(S.style==='marea')wake()};
+  r();bt.addEventListener('levelchange',r);bt.addEventListener('chargingchange',r)}).catch(()=>{})}catch(e){}
+setInterval(()=>{if(S.minutes==null&&!active){drawDisc();render();sync()}},60000);
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(build,200)});
+build(); showPanel(); setTimeout(()=>hint.style.opacity=0,3800);
+})();
+</script>
+</body>
+</html>
