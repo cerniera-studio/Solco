@@ -69,9 +69,10 @@ adb shell wm size reset
 
 adb logcat -d > logcat.txt
 grep -E "Solco|solco|AndroidRuntime|FATAL" logcat.txt > app-log.txt || true
-if grep -qE "FATAL EXCEPTION|build failed|frame failed" app-log.txt; then
-  echo "::error::The app crashed on the emulator; see app-log.txt in the release"
-  grep -A 12 -E "FATAL EXCEPTION|build failed|frame failed" app-log.txt | head -30
+# Only Solco's own failures count: the emulator's stock wallpaper picker sometimes crashes by itself
+if grep -A1 "FATAL EXCEPTION" app-log.txt | grep -q "Process: $PKG" || grep -qE "build failed|frame failed" app-log.txt; then
+  echo "::error::Solco failed on the emulator; see app-log.txt in the release"
+  grep -A 14 -E "FATAL EXCEPTION|build failed|frame failed" app-log.txt | head -40
   exit 1
 fi
 exit 0
