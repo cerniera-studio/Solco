@@ -153,7 +153,11 @@ class SettingsActivity : Activity() {
         syncCrash()
     }
 
+    private val version by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?" }
+
     private fun syncCrash() {
+        // A report from an earlier build describes a fault that build may already have fixed
+        Crash.report(this)?.let { if (!it.startsWith("Solco $version\n")) Crash.clear(this) }
         val r = Crash.report(this)
         crashCard.visibility = if (r == null) View.GONE else View.VISIBLE
         if (r != null) {
@@ -216,6 +220,7 @@ class SettingsActivity : Activity() {
             "GPU: " + (Crash.get(this, "gpu") ?: "not seen yet"),
             "GPU problem: " + (Crash.get(this, "gl_error") ?: "none"),
             "Tronco record began: " + Growth.start(this),
+            "Version: $version",
         ).joinToString("\n")
     }
 

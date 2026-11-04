@@ -178,7 +178,10 @@ object Crash {
 
     /** GPU facts and the first frame drawn on each screen, for Diagnostics. */
     fun gpu(c: Context, s: String) { store(c).edit().putString("gpu", s).apply() }
-    fun drew(c: Context, tall: Boolean, s: String) { store(c).edit().putString(if (tall) "drew_cover" else "drew_main", "$s, ${stamp()}").apply() }
+    /** A frame drawn means any earlier GPU problem is over. */
+    fun drew(c: Context, tall: Boolean, s: String) {
+        store(c).edit().putString(if (tall) "drew_cover" else "drew_main", "$s, ${stamp()}").remove("gl_error").apply()
+    }
     fun glError(c: Context, s: String) { store(c).edit().putString("gl_error", "$s, ${stamp()}").commit() }
     fun get(c: Context, key: String): String? = store(c).getString(key, null)
     fun stampNow() = stamp()
