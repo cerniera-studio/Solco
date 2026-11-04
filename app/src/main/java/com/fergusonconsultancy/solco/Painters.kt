@@ -28,7 +28,7 @@ object Backdrop {
             val rng = Rng(11)
             var rr = s.r * .06f
             while (rr < s.r * .40f) {
-                val t = (rr / s.r - .06f) / .34f
+                val t = ((rr / s.r - .06f) / .34f).coerceIn(0f, 1f)   // the first groove can land a hair below zero
                 p.color = withAlpha(f.groove, f.grooveA * (.35f + .65f * t.pow(1.4f)))
                 c.drawCircle(s.cx, s.cy, rr, p)
                 rr += (3.2f + rng.next() * 2.4f) * s.dp

@@ -51,7 +51,10 @@ object Type {
 }
 
 /** An RGB colour with an alpha from 0 to 1. */
-fun withAlpha(rgb: Int, a: Float): Int = ((a * 255f).roundToInt().coerceIn(0, 255) shl 24) or (rgb and 0xFFFFFF)
+fun withAlpha(rgb: Int, a: Float): Int {
+    val v = if (a.isNaN()) 0 else (a.coerceIn(0f, 1f) * 255f).roundToInt()
+    return (v shl 24) or (rgb and 0xFFFFFF)
+}
 
 fun Context.px(v: Number): Int = (v.toFloat() * resources.displayMetrics.density + 0.5f).toInt()
 

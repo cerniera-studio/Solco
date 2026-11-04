@@ -47,20 +47,31 @@ adb shell input swipe 500 1800 500 400 300
 sleep 1.5
 adb exec-out screencap -p > shot-settings-scrolled.png
 
-# The main screen's near-square shape: Solco centred on the crease, in Rosso
+# The Fold's main screen at its real size: Solco centred on the crease, in Rosso
 prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">ROSSO</string>"
-adb shell wm size 1812x2000
+adb shell wm size 2256x2504   # the Fold 8 Ultra main screen, as Diagnostics reported it
 sleep 3
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
 sleep 15
 adb exec-out screencap -p > shot-preview-main.png
 adb shell wm size reset
 
+# Every style and finish at the main screen's size, so no combination fails only on the phone
+adb shell wm size 2256x2504
+for st in SOLCO TRONCO; do for fi in VISCONTI AVORIO CARBONIO ROSSO; do
+  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>"
+  adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+  sleep 9
+  adb shell input keyevent KEYCODE_BACK
+  sleep 1
+done; done
+adb shell wm size reset
+
 adb logcat -d > logcat.txt
 grep -E "Solco|solco|AndroidRuntime|FATAL" logcat.txt > app-log.txt || true
-if grep -q "FATAL EXCEPTION" app-log.txt; then
+if grep -qE "FATAL EXCEPTION|build failed|frame failed" app-log.txt; then
   echo "::error::The app crashed on the emulator; see app-log.txt in the release"
-  grep -A 12 "FATAL EXCEPTION" app-log.txt | head -30
+  grep -A 12 -E "FATAL EXCEPTION|build failed|frame failed" app-log.txt | head -30
   exit 1
 fi
 exit 0
