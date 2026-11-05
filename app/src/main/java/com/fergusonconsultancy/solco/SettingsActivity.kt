@@ -122,6 +122,14 @@ class SettingsActivity : Activity() {
         action = button("Set as wallpaper") { setWallpaper() }
         col.addView(action, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(30) })
 
+        // Sipario, the second wallpaper in this app
+        col.addView(eyebrow("Also here"))
+        col.addView(card().apply {
+            addView(row("Sipario", "Five scenes. Folded, a quiet one; unfold, and the rest of the story.",
+                label("Open", 14f, Palette.CHAMPAGNE, 500)))
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, SiparioActivity::class.java)) }
+        })
+
         // Diagnostics, folded away
         val head = eyebrow("Diagnostics  +").apply { setTextColor(Palette.MUTED) }
         diagHead = head

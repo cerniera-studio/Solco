@@ -25,6 +25,18 @@ Visconti (green-black, champagne and ivory grain), Avorio (bone, ink and oxide g
 
 At rest nothing is drawn. Frames run only while grain is moving, after a fold or a touch, and once a minute for the sun. Hidden, the wallpaper listens to nothing. Tronco samples once a minute whether the screen is on and unfolded; asleep, nothing runs.
 
+## Sipario
+
+A second wallpaper in the same app: five scenes, each one world drawn at the Fold's own scale. The cover (1,080 × 2,520) and the main screen (2,256 × 2,504) share 422 ppi, and the cover is almost exactly the main screen's right half. Folded, you see the half you hold; unfold, and the door swings away from what was standing beside it. Nothing zooms.
+
+- **Catenaria.** Weighted chains hang from a rod. Unfolded, the door is Gaudí's mirror: the same curves stand up as arches, built from their feet, and the tallest keystone lights.
+- **Stagioni.** The tree as it stands today. Unfolded, the canopy runs back through the year: summer by the crease, then blossom, then last winter's frost. Folding shakes a few loose autumn leaves down.
+- **Ponte.** The road stops at a raised bascule bridge, its red lamp lit. Unfolded, the span has come down on the hinge and seats, and a Bauhaus town lights up across the river.
+- **Fanale.** A red ring over a wet road, like a moon. Unfolded, its twin lights bead by bead: tail lamps. Tap to lock.
+- **Goccia.** A drop forms on a leaf tip. Unfolded, the hinge's settle shakes it loose into the pond.
+
+Each scene draws only on a fold, a touch, or the minute. Concentrato is shared with Solco. Open Sipario from the foot of Solco's Settings, or choose it in the wallpaper picker.
+
 ## Install
 
 1. Open **Releases** on this repo and download `Solco.apk` on the phone.
@@ -49,6 +61,10 @@ At the foot of Settings: whether the wallpaper has drawn on the cover screen and
 | `Look.kt` | Finishes, styles, saved choices |
 | `SettingsActivity.kt`, `Views.kt`, `Kit.kt` | Settings in the family's kit |
 | `tools/preview.html` | The browser preview Solco was designed in |
+| `Sipario.kt` | Sipario's five scenes, drawn with a Canvas in one world at the Fold's scale |
+| `SiparioWallpaperService.kt` | Sipario's wallpaper host: a hardware canvas, the fold, touch, the minute |
+| `SiparioActivity.kt` | Sipario's settings: the scene live, play the unfold, five tiles |
+| `tools/sipario-preview.html` | The browser preview Sipario was designed in |
 | `tools/emulator_test.sh` | The emulator run behind each release's screenshots |
 
 Fonts: Italiana and Jost, both under the SIL Open Font Licence (in `app/src/main/assets/fonts`).

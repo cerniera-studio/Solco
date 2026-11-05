@@ -67,6 +67,33 @@ for st in SOLCO TRONCO; do for fi in VISCONTI AVORIO CARBONIO ROSSO; do
 done; done
 adb shell wm size reset
 
+# Sipario: its settings, then each scene on the cover's shape, the moment it unfolds, and at rest unfolded
+SIP=$PKG/.SiparioWallpaperService
+adb shell am start -n $PKG/.SiparioActivity
+sleep 6
+adb exec-out screencap -p > shot-sipario-settings.png
+for act in CATENARIA STAGIONI PONTE FANALE GOCCIA; do
+  prefs "<string name=\"sipario\">$act</string>"
+  adb shell wm size 1080x2520   # the Fold 8 Ultra cover screen
+  sleep 2
+  adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $SIP
+  sleep 8
+  adb exec-out screencap -p > shot-sipario-$act-cover.png
+  # The fold: the same wallpaper, the screen becomes the main one
+  adb shell wm size 2256x2504
+  sleep 0.6
+  adb exec-out screencap -p > shot-sipario-$act-unfolding.png
+  sleep 5
+  adb exec-out screencap -p > shot-sipario-$act-main.png
+  adb shell input tap 900 1500
+  sleep 0.3
+  adb exec-out screencap -p > shot-sipario-$act-touch.png
+  adb shell input keyevent KEYCODE_BACK
+  sleep 1
+  adb shell wm size reset
+  sleep 2
+done
+
 adb logcat -d > logcat.txt
 grep -E "Solco|solco|AndroidRuntime|FATAL" logcat.txt > app-log.txt || true
 # Only Solco's own failures count: the emulator's stock wallpaper picker sometimes crashes by itself

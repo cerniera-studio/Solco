@@ -45,6 +45,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
           name: Solco build ${{ github.run_number }}
           files: Solco.apk
 
@@ -88,6 +89,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
           files: |
             shot-*.png
             app-log.txt
