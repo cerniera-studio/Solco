@@ -109,11 +109,16 @@ public class SolcoWallpaperService extends WallpaperService {
             sensors = (SensorManager) c.getSystemService(Context.SENSOR_SERVICE);
             hinge = sensors != null ? sensors.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) : null;
             Diag.hinge(c, hinge != null);
+            // Heard for as long as the wallpaper is set: the screen goes dark before the hinge finishes
+            // moving, so a visible-only listener never had a fold's readings. It reports only on movement.
+            if (hinge != null) sensors.registerListener(this, hinge, SensorManager.SENSOR_DELAY_UI);
         }
 
         @Override
         public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
             super.onSurfaceChanged(holder, format, width, height);
+            // One UI hands over a zero-size surface mid-fold: neither screen, so not an arrival
+            if (width <= 0 || height <= 0) return;
             tall = height > width * 1.5f;
             Diag.seen(SolcoWallpaperService.this, tall, width, height, displayId());
             if (visible) arrive();
@@ -160,7 +165,6 @@ public class SolcoWallpaperService extends WallpaperService {
             listening = on;
             Context c = SolcoWallpaperService.this;
             if (on) {
-                if (hinge != null) sensors.registerListener(this, hinge, SensorManager.SENSOR_DELAY_UI);
                 IntentFilter f = new IntentFilter();
                 f.addAction(Intent.ACTION_TIME_TICK);
                 f.addAction(Intent.ACTION_TIME_CHANGED);
@@ -168,7 +172,6 @@ public class SolcoWallpaperService extends WallpaperService {
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(clock, f, Context.RECEIVER_NOT_EXPORTED);
                 else c.registerReceiver(clock, f);
             } else {
-                if (hinge != null) sensors.unregisterListener(this);
                 try {
                     c.unregisterReceiver(clock);
                 } catch (IllegalArgumentException ignored) {
@@ -214,6 +217,7 @@ public class SolcoWallpaperService extends WallpaperService {
         public void onDestroy() {
             Prefs.of(SolcoWallpaperService.this).unregisterOnSharedPreferenceChangeListener(this);
             listen(false);
+            if (hinge != null) sensors.unregisterListener(this);
             if (view != null) {
                 view.destroy();
                 view = null;

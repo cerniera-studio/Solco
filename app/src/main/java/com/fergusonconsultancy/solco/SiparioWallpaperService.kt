@@ -61,11 +61,17 @@ class SiparioWallpaperService : WallpaperService() {
             Prefs.of(c).registerOnSharedPreferenceChangeListener(this)
             sensors = c.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
             hinge = sensors?.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
+            // The hinge is heard for as long as the wallpaper is set, not only while it is in view: the
+            // screen goes dark before the hinge finishes moving, so a visible-only listener never
+            // has the readings a fold's speed is measured from. The sensor reports only when the hinge moves.
+            hinge?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
             arrivedAt = SystemClock.uptimeMillis() - 1_000_000L
         }
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
+            // One UI hands over a zero-size surface mid-fold. It is neither screen, so it must not count as an arrival.
+            if (width <= 0 || height <= 0) return
             w = width; h = height
             tall = height > width * 1.5f
             SipDiag.seen(this@SiparioWallpaperService, tall, width, height)
@@ -101,13 +107,11 @@ class SiparioWallpaperService : WallpaperService() {
             listening = on
             val c = this@SiparioWallpaperService
             if (on) {
-                hinge?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
                 val f = IntentFilter().apply {
                     addAction(Intent.ACTION_TIME_TICK); addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED)
                 }
                 if (android.os.Build.VERSION.SDK_INT >= 33) c.registerReceiver(clock, f, Context.RECEIVER_NOT_EXPORTED) else c.registerReceiver(clock, f)
             } else {
-                if (hinge != null) sensors?.unregisterListener(this)
                 runCatching { c.unregisterReceiver(clock) }
             }
         }
@@ -191,6 +195,7 @@ class SiparioWallpaperService : WallpaperService() {
         override fun onDestroy() {
             Prefs.of(this@SiparioWallpaperService).unregisterOnSharedPreferenceChangeListener(this)
             listen(false)
+            if (hinge != null) sensors?.unregisterListener(this)
             stop()
             super.onDestroy()
         }
