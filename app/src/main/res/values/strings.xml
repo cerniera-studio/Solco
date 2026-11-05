@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Solco</string>
     <string name="description">Grain and light that move only when something moves them: the fold, your finger, the sun.</string>
+    <string name="sipario_name">Sipario</string>
+    <string name="sipario_description">Folded, a quiet scene. Unfold, and the rest of the story comes into view.</string>
 </resources>

@@ -22,6 +22,24 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SiparioActivity"
+            android:exported="true"
+            android:label="@string/sipario_name" />
+
+        <service
+            android:name=".SiparioWallpaperService"
+            android:exported="true"
+            android:label="@string/sipario_name"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/sipario" />
+        </service>
+
         <service
             android:name=".SolcoWallpaperService"
             android:exported="true"

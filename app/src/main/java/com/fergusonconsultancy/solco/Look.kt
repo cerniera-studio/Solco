@@ -51,6 +51,10 @@ object Prefs {
     fun setFinish(c: Context, f: Finish) = of(c).edit().putString("finish", f.name).apply()
     fun setLuna(c: Context, on: Boolean) = of(c).edit().putBoolean("luna", on).apply()
     fun setConcentrato(c: Context, on: Boolean) = of(c).edit().putBoolean("concentrato", on).apply()
+
+    /** Sipario's scene. Its engine listens for this key alone. */
+    @JvmStatic fun act(c: Context) = runCatching { Act.valueOf(of(c).getString("sipario", null) ?: "CATENARIA") }.getOrDefault(Act.CATENARIA)
+    fun setAct(c: Context, a: Act) = of(c).edit().putString("sipario", a.name).apply()
 }
 
 object Look {
