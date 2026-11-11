@@ -61,7 +61,8 @@ class Scene(
     // ---- Marea: grain filled to the battery level, foam at the surface, sediment at the floor ----
     /** Where the surface lies at x: the level, with a slow swell along it. */
     fun surface(x: Float): Float {
-        val base = h * (1f - (.04f + .92f * level.coerceIn(0f, 1f)))
+        // Full sits a sixth of the way down, empty near the floor: the surface and its foam always show
+        val base = h * (1f - (.12f + .70f * level.coerceIn(0f, 1f)))
         return base + 3.2f * dp * sin(x / (w * .23f) + 1.3f) + 1.6f * dp * sin(x / (w * .071f))
     }
 
