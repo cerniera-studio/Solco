@@ -34,7 +34,7 @@ prefs() {
   adb shell run-as $PKG mkdir -p shared_prefs
   adb shell run-as $PKG cp /data/local/tmp/solco.xml shared_prefs/solco.xml
 }
-prefs "<string name=\"style\">TRONCO</string><string name=\"finish\">AVORIO</string><string name=\"growth_start\">$(date -d '-20 days' +%F)</string>"
+prefs "<string name=\"style\">TRONCO</string><string name=\"finish\">TABACCO</string><string name=\"growth_start\">$(date -d '-20 days' +%F)</string>"
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
 sleep 15
 adb exec-out screencap -p > shot-preview-tronco.png
@@ -48,7 +48,7 @@ sleep 1.5
 adb exec-out screencap -p > shot-settings-scrolled.png
 
 # The Fold's main screen at its real size: Solco centred on the crease, in Rosso
-prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">ROSSO</string>"
+prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">NOTTE</string>"
 adb shell wm size 2256x2504   # the Fold 8 Ultra main screen, as Diagnostics reported it
 sleep 3
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
@@ -56,9 +56,36 @@ sleep 15
 adb exec-out screencap -p > shot-preview-main.png
 adb shell wm size reset
 
+# 11 Nov 2026: the new styles in every finish on the cover's shape, Marea at 35% and charging, Duna tilted
+adb shell wm size 1080x2520; sleep 2
+for st in SOLCO MAREA DUNA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
+  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>"
+  adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+  sleep 8
+  adb exec-out screencap -p > "shot-new-$st-$fi.png"
+  adb shell input keyevent KEYCODE_BACK; sleep 1
+done; done
+adb shell dumpsys battery set level 35
+prefs "<string name=\"style\">MAREA</string><string name=\"finish\">NOTTE</string>"
+adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+sleep 8; adb exec-out screencap -p > shot-marea-35.png
+adb shell dumpsys battery set status 2; adb shell dumpsys battery set ac 1; sleep 3
+adb exec-out screencap -p > shot-marea-35-charging.png
+adb shell dumpsys battery reset
+adb shell input keyevent KEYCODE_BACK; sleep 1
+prefs "<string name=\"style\">DUNA</string><string name=\"finish\">TABACCO</string>"
+adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+sleep 8; adb exec-out screencap -p > shot-duna-level.png
+adb emu sensor set acceleration 6.5:4.0:6.0; sleep 5
+adb exec-out screencap -p > shot-duna-tilted.png
+adb emu sensor set acceleration 0:9.81:0.5; sleep 6
+adb exec-out screencap -p > shot-duna-after.png
+adb shell input keyevent KEYCODE_BACK; sleep 1
+adb shell wm size reset
+
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in SOLCO TRONCO; do for fi in VISCONTI AVORIO CARBONIO ROSSO; do
+for st in SOLCO TRONCO MAREA DUNA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9

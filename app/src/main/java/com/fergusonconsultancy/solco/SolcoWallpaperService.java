@@ -82,6 +82,38 @@ public class SolcoWallpaperService extends WallpaperService {
         private Sensor hinge;
         private boolean listening;
 
+        private Sensor gravity;
+        private boolean tilting;
+        private float lastGx = 99f, lastGy = 99f;
+
+        /** Marea: the battery's level and charging, as they change. */
+        private final BroadcastReceiver battery = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) {
+                if (view == null) return;
+                kotlin.Pair<Float, Boolean> p = Power.INSTANCE.from(i);
+                final float level = p.getFirst();
+                final boolean charging = p.getSecond();
+                view.queueEvent(() -> renderer.power(level, charging));
+                view.requestRender();
+            }
+        };
+
+        /** Duna reads the tilt only while it is on screen; nothing else does. */
+        private void tiltSensor(boolean on) {
+            on = on && sensors != null && Prefs.INSTANCE.style(SolcoWallpaperService.this) == Style.DUNA;
+            if (on == tilting) return;
+            tilting = on;
+            if (on) {
+                gravity = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY);
+                if (gravity == null) gravity = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+                if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_UI);
+            } else if (gravity != null) {
+                sensors.unregisterListener(this, gravity);
+                lastGx = 99f; lastGy = 99f;
+            }
+        }
+
         private final BroadcastReceiver clock = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent i) {
@@ -171,16 +203,35 @@ public class SolcoWallpaperService extends WallpaperService {
                 f.addAction(Intent.ACTION_TIMEZONE_CHANGED);
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(clock, f, Context.RECEIVER_NOT_EXPORTED);
                 else c.registerReceiver(clock, f);
+                if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED);
+                else c.registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                tiltSensor(true);
             } else {
                 try {
                     c.unregisterReceiver(clock);
                 } catch (IllegalArgumentException ignored) {
                 }
+                try {
+                    c.unregisterReceiver(battery);
+                } catch (IllegalArgumentException ignored) {
+                }
+                tiltSensor(false);
             }
         }
 
         @Override
         public void onSensorChanged(SensorEvent e) {
+            int type = e.sensor.getType();
+            if (type == Sensor.TYPE_GRAVITY || type == Sensor.TYPE_ACCELEROMETER) {
+                if (view == null || e.values.length < 2) return;
+                // Gravity across the screen: device x to the right, device y up, so screen y is flipped
+                final float gx = -e.values[0], gy = e.values[1];
+                if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.35f) return;
+                lastGx = gx; lastGy = gy;
+                view.queueEvent(() -> renderer.tilt(gx, gy));
+                view.requestRender();
+                return;
+            }
             if (e.values.length > 0) FoldWatch.hinge(e.values[0]);
         }
 
@@ -203,6 +254,7 @@ public class SolcoWallpaperService extends WallpaperService {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences p, String key) {
             if (!Prefs.isLook(key) || view == null) return;
+            if (visible) { tiltSensor(false); tiltSensor(true); }
             view.queueEvent(() -> renderer.rebuild());
             view.requestRender();
             notifyColorsChanged();
@@ -217,7 +269,7 @@ public class SolcoWallpaperService extends WallpaperService {
         public void onDestroy() {
             Prefs.of(SolcoWallpaperService.this).unregisterOnSharedPreferenceChangeListener(this);
             listen(false);
-            if (hinge != null) sensors.unregisterListener(this);
+            if (sensors != null) sensors.unregisterListener(this);
             if (view != null) {
                 view.destroy();
                 view = null;
