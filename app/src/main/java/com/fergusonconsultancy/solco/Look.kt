@@ -7,8 +7,8 @@ import android.graphics.Color
 
 /**
  * A finish: the ground, the fine grooves, three grain colours, and the disc by day and by night.
- * Colours are 0xRRGGBB. Visconti keeps the Fold family's palette; Avorio is closest to the stipple
- * prints Solco began from; Carbonio and Rosso are taken from the same prints.
+ * Colours are 0xRRGGBB. Visconti keeps the Fold family's palette; Carbonio is taken from the stipple prints
+ * Solco began from; Notte, Tabacco, Grafite and Bronzo are its darker companions.
  */
 enum class Finish(
     val title: String,
@@ -22,16 +22,21 @@ enum class Finish(
     val speck: Int,
     val light: Boolean,
 ) {
+    // 11 Nov 2026: Avorio (too light) became Tabacco and Rosso (its tone) became Notte; Grafite and Bronzo added
     VISCONTI("Visconti", 0x0E1311, 0xD9BB86, 0.10f, intArrayOf(0xD9BB86, 0xF6F1E6, 0x96805C), 0.72f, 0xECE0C8, 0xC9A064, 0x0E1311, false),
-    AVORIO("Avorio", 0xECE6DA, 0x1E2430, 0.42f, intArrayOf(0x1E2A3A, 0xA63A2A, 0x5A6270), 0.90f, 0xB03426, 0x6E161A, 0xECE6DA, true),
     CARBONIO("Carbonio", 0x0B0B0C, 0xF6F1E6, 0.08f, intArrayOf(0xE2DED6, 0xB2382A, 0x76767A), 0.78f, 0xF0ECE4, 0xCEB28A, 0x0B0B0C, false),
-    ROSSO("Rosso", 0x360D0F, 0xD9BB86, 0.10f, intArrayOf(0xD9BB86, 0xF6F1E6, 0x962A26), 0.76f, 0xF0E4CE, 0xD2AA6E, 0x360D0F, false),
+    NOTTE("Notte", 0x0A0F1E, 0xD9BB86, 0.09f, intArrayOf(0xEEEBE4, 0xD9BB86, 0x5C6C8E), 0.74f, 0xEEF0F5, 0xD4D8E2, 0x0A0F1E, false),
+    TABACCO("Tabacco", 0x1C140E, 0xE6D4B0, 0.09f, intArrayOf(0xE6D6B4, 0xC28C44, 0x7E5C3C), 0.76f, 0xF2E2C2, 0xCC9A58, 0x1C140E, false),
+    GRAFITE("Grafite", 0x18191B, 0xC8CCD2, 0.08f, intArrayOf(0xD4D7DC, 0x8C9096, 0x55595F), 0.74f, 0xE8EAEC, 0xB4B8BE, 0x18191B, false),
+    BRONZO("Bronzo", 0x0D0B09, 0xC8894A, 0.09f, intArrayOf(0xD69C5E, 0xB4683A, 0xEAD4A8), 0.78f, 0xF2CC96, 0xB97C46, 0x0D0B09, false),
 }
 
 /** A style is a different force acting on the grain. Each says what puts it where it is. */
 enum class Style(val title: String, val note: String) {
     SOLCO("Solco", "Rings centred on the hinge. Folding stirs the grain along the swing; a fast fold leaves the bands emptier."),
     TRONCO("Tronco", "One ring a day, as wide as that day’s unfolded use: pale early grain, then a dense line where the day closed. The trunk begins as a core on the day you set it."),
+    MAREA("Marea", "The grain fills to your battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still."),
+    DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain slides downhill; level the phone and the wind blows it home."),
 }
 
 object Prefs {
@@ -43,7 +48,10 @@ object Prefs {
     @JvmStatic fun isLook(key: String?) = key != null && key in LOOK
 
     fun style(c: Context) = runCatching { Style.valueOf(of(c).getString("style", null) ?: "SOLCO") }.getOrDefault(Style.SOLCO)
-    fun finish(c: Context) = runCatching { Finish.valueOf(of(c).getString("finish", null) ?: "VISCONTI") }.getOrDefault(Finish.VISCONTI)
+    fun finish(c: Context): Finish {
+        val name = when (val n = of(c).getString("finish", null)) { "AVORIO" -> "TABACCO"; "ROSSO" -> "NOTTE"; null -> "VISCONTI"; else -> n }
+        return runCatching { Finish.valueOf(name) }.getOrDefault(Finish.VISCONTI)
+    }
     fun luna(c: Context) = of(c).getBoolean("luna", true)
     fun concentrato(c: Context) = of(c).getBoolean("concentrato", true)
 

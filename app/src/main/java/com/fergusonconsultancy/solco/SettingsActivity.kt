@@ -77,14 +77,17 @@ class SettingsActivity : Activity() {
 
         // Style: each one a different force
         col.addView(eyebrow("Style"))
-        val styleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        Style.values().forEachIndexed { i, s ->
-            val t = PictureTile(this, s.title, Prefs.style(this) == s, 168,
-                { cv, w, h -> paintStill(this, cv, w, h, s, Prefs.finish(this)) }) { pickStyle(s) }
-            styleTiles += s to t
-            styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
+        // Two rows of two: each style large enough to read its grain
+        Style.values().toList().chunked(2).forEachIndexed { r, pair ->
+            val styleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            pair.forEachIndexed { i, s ->
+                val t = PictureTile(this, s.title, Prefs.style(this) == s, 168,
+                    { cv, w, h -> paintStill(this, cv, w, h, s, Prefs.finish(this)) }) { pickStyle(s) }
+                styleTiles += s to t
+                styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
+            }
+            col.addView(styleRow, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = px(14) })
         }
-        col.addView(styleRow)
         styleNote = label(Prefs.style(this).note, 13.5f, Palette.MUTED).apply { setPadding(px(2), px(14), 0, 0) }
         col.addView(styleNote)
 
@@ -97,14 +100,17 @@ class SettingsActivity : Activity() {
 
         // Finish
         col.addView(eyebrow("Finish"))
-        val finishRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        Finish.values().forEachIndexed { i, f ->
-            val t = PictureTile(this, f.title, Prefs.finish(this) == f, 132,
-                { cv, w, h -> paintStill(this, cv, w, h, Prefs.style(this), f) }) { pickFinish(f) }
-            finishTiles += f to t
-            finishRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(10) })
+        // Two rows of three
+        Finish.values().toList().chunked(3).forEachIndexed { r, trio ->
+            val finishRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            trio.forEachIndexed { i, f ->
+                val t = PictureTile(this, f.title, Prefs.finish(this) == f, 132,
+                    { cv, w, h -> paintStill(this, cv, w, h, Prefs.style(this), f) }) { pickFinish(f) }
+                finishTiles += f to t
+                finishRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(10) })
+            }
+            col.addView(finishRow, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = px(12) })
         }
-        col.addView(finishRow)
 
         // Light and motion
         col.addView(eyebrow("Light and motion"))

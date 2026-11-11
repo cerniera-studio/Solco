@@ -23,6 +23,9 @@ class Scene(
     val style: Style,
     private val rings: FloatArray,
     coverOverride: Boolean? = null,
+    /** Marea: the battery, 0 to 1, and whether it is charging (the only time its surface moves). */
+    val level: Float = 1f,
+    charging: Boolean = false,
 ) {
     val cover: Boolean = coverOverride ?: (h > w * 1.5f)
     val cx: Float = if (cover) 0f else w / 2f
@@ -51,7 +54,79 @@ class Scene(
     val n: Int = when (style) {
         Style.SOLCO -> genSolco()
         Style.TRONCO -> genTronco()
+        Style.MAREA -> genMarea()
+        Style.DUNA -> genDuna()
     }
+
+    // ---- Marea: grain filled to the battery level, foam at the surface, sediment at the floor ----
+    /** Where the surface lies at x: the level, with a slow swell along it. */
+    fun surface(x: Float): Float {
+        // Full sits a sixth of the way down, empty near the floor: the surface and its foam always show
+        val base = h * (1f - (.12f + .70f * level.coerceIn(0f, 1f)))
+        return base + 3.2f * dp * sin(x / (w * .23f) + 1.3f) + 1.6f * dp * sin(x / (w * .071f))
+    }
+
+    private fun genMarea(): Int {
+        val rng = Rng(43)
+        var k = 0; var guard = 0
+        val foam = 7f * dp
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * w; val y = rng.next() * h
+            val sy = surface(x)
+            if (y < sy - foam * .6f) continue
+            val depth = (y - sy) / (h - sy).coerceAtLeast(1f)
+            // Dense foam at the surface, a clear band beneath it, then the body thickening to the floor
+            val dens: Float; val c: Int
+            if (y < sy + foam) { dens = .95f; c = 1 }
+            else { dens = .10f + .55f * depth.pow(1.6f) + .25f * (.5f + .5f * sin(y / (11f * dp))) * depth; c = if (depth > .82f) 2 else 0 }
+            if (rng.next() > dens) continue
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
+            k++
+        }
+        return k
+    }
+
+    /** Marea while charging: the surface breathes. Nothing else ever moves on its own. */
+    var breathing = charging && style == Style.MAREA
+    private var breathT0 = 0L
+
+    // ---- Duna: wind ripples blowing out from the hinge, gentle windward, steep on the lee ----
+    private fun genDuna(): Int {
+        val rng = Rng(53)
+        val lambda = 26f * dp
+        var k = 0; var guard = 0
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * w; val y = rng.next() * h
+            // Distance downwind from the hinge, the ripples curving a little as wind does
+            val u = abs(x - cx) + .035f * h * sin(y / h * 6.2832f * 1.3f + abs(x - cx) / (w * .4f))
+            val ph = (u / lambda) % 1f
+            val ripple = if (ph < .75f) (ph / .75f).pow(1.5f) else (1f - (ph - .75f) / .25f).pow(3f)
+            val dune = .55f + .45f * sin(u / (lambda * 9f) + y / (h * .9f))
+            val dens = .06f + .80f * ripple * dune
+            if (rng.next() > dens) continue
+            hx[k] = x; hy[k] = y
+            col[k] = (if (ripple > .82f) 1 else if (ripple < .25f && rng.next() < .6f) 2 else 0).toByte()
+            hash[k] = rng.next()
+            k++
+        }
+        return k
+    }
+
+    /** Gravity across the screen (px/s² in screen axes), from the tilt sensor; Duna only. */
+    private var gx = 0f
+    private var gy = 0f
+    /** Below this share of g a slope holds: the angle of repose, about 17°. */
+    private val repose = .30f * 9.81f
+
+    fun tilt(x: Float, y: Float) { gx = x; gy = y }
+
+    /** Only the loosest fifth of the grain slides, each at its own speed, so no seam forms. */
+    private fun loose(i: Int) = if (style == Style.DUNA && hash[i] > .80f) (hash[i] - .80f) / .20f else 0f
+
+    /** True if the slope is past the angle of repose, so the loose grain will move. */
+    fun sliding() = style == Style.DUNA && hypot(gx, gy) > repose
 
     // ---- Solco: bands of grain round the hinge, densest towards each band's outer edge ----
     private fun genSolco(): Int {
@@ -185,7 +260,31 @@ class Scene(
         val k = .010f * dt
         val damp = .915f.pow(dt)
         var energy = 0f
+        // Duna: past the angle of repose the loose grain runs downhill; below it, the wind blows it home slowly
+        val slide = sliding()
+        val gm = hypot(gx, gy).coerceAtLeast(1e-3f)
+        val pull = if (slide) (gm - repose) / 9.81f * .9f * dp * dt else 0f
+        val ux = gx / gm; val uy = gy / gm
         for (i in 0 until n) {
+            val m = loose(i)
+            if (m > 0f && (slide || abs(ox[i]) + abs(oy[i]) > .5f * dp)) {
+                if (slide) {
+                    vx[i] = (vx[i] + ux * pull * (.35f + .65f * m)) * .94f.pow(dt)
+                    vy[i] = (vy[i] + uy * pull * (.35f + .65f * m)) * .94f.pow(dt)
+                } else {
+                    // The wind: a much softer spring than the touch's, so it reads as resettling
+                    vx[i] = (vx[i] - ox[i] * .0016f * dt) * .9f.pow(dt)
+                    vy[i] = (vy[i] - oy[i] * .0016f * dt) * .9f.pow(dt)
+                }
+                ox[i] += vx[i] * dt; oy[i] += vy[i] * dt
+                // Pools at the edge of the screen
+                val x = hx[i] + ox[i]; val y = hy[i] + oy[i]
+                if (x < 0f) { ox[i] = -hx[i]; vx[i] = 0f } else if (x > w - 1f) { ox[i] = w - 1f - hx[i]; vx[i] = 0f }
+                if (y < 0f) { oy[i] = -hy[i]; vy[i] = 0f } else if (y > h - 1f) { oy[i] = h - 1f - hy[i]; vy[i] = 0f }
+                val e = abs(vx[i]) + abs(vy[i])
+                if (e > energy) energy = e
+                continue
+            }
             if (kick[i] != 0f) {
                 if (now >= kickAt[i]) {
                     val dx = hx[i] - cx; val dy = hy[i] - cy
@@ -205,7 +304,19 @@ class Scene(
             if (energy < 1.2f * dp) empty *= .95f.pow(dt)
             if (empty < .01f) empty = 0f
         }
-        val moving = energy > .01f * dp || pressed || empty > 0f
+        // Marea on charge: the grain near the surface rises and falls on a slow swell
+        if (breathing) {
+            if (breathT0 == 0L) breathT0 = now
+            val t = (now - breathT0) / 1000f
+            val band = 40f * dp
+            for (i in 0 until n) {
+                val d = hy[i] - surface(hx[i])
+                if (d > band) continue
+                val f = 1f - (d.coerceAtLeast(0f) / band)
+                oy[i] = 2.6f * dp * f * sin(t * 1.1f + hx[i] / (w * .18f)) + oy[i] * .2f
+            }
+        }
+        val moving = energy > .01f * dp || pressed || empty > 0f || breathing
         if (!moving) last = 0L
         return moving
     }

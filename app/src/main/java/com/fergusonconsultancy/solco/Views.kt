@@ -52,7 +52,8 @@ class PreviewView(c: Context, private val aspect: Float) : View(c) {
         val style = Prefs.style(context)
         finish = Prefs.finish(context)
         val dp = resources.displayMetrics.density
-        val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0))
+        val (lvl, chg) = Power.read(context)
+        val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0), level = lvl, charging = chg)
         back?.recycle(); disc?.recycle()
         back = Backdrop.paint(s, finish)
         val sky = Sky.now()
@@ -133,7 +134,7 @@ class PictureTile(
 fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) {
     val dp = c.resources.displayMetrics.density * .5f
     val rings = if (style == Style.TRONCO) Growth.sample(30) else FloatArray(0)
-    val s = Scene(w, h, dp, style, rings, coverOverride = true)
+    val s = Scene(w, h, dp, style, rings, coverOverride = true, level = Power.read(c).first)
     val back = Backdrop.paint(s, f)
     val sky = Sky.now()
     val d = s.disc(sky)

@@ -89,6 +89,19 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
 
     fun touch(x: Float, y: Float, down: Boolean) { scene?.touch(x, y, down) }
 
+    @Volatile private var builtLevel = -1f
+
+    /** The battery changed: Marea refills when the level moves a whole percent, and breathes only on charge. */
+    fun power(level: Float, charging: Boolean) {
+        val s = scene ?: return
+        if (s.style != Style.MAREA) return
+        if (kotlin.math.abs(level - builtLevel) >= .01f) dirtyBuild = true
+        s.breathing = charging
+    }
+
+    /** The tilt changed (Duna). Screen axes, y down. */
+    fun tilt(x: Float, y: Float) { scene?.tilt(x, y) }
+
     /** Everything a look needs, made away from the GL thread so the first frame never waits for it. */
     private class Prepared(val w: Int, val h: Int, val scene: Scene, val finish: Finish, val cols: FloatArray, val back: Bitmap, val ms: Long)
 
@@ -112,7 +125,9 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val style = Prefs.style(ctx)
                 val f = Prefs.finish(ctx)
                 val dp = ctx.resources.displayMetrics.density
-                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0))
+                val (lvl, chg) = Power.read(ctx)
+                builtLevel = lvl
+                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg)
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
                     val c = f.grain[sc.col[i].toInt()]
