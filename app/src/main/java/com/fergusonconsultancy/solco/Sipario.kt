@@ -48,14 +48,15 @@ object World {
 
     /**
      * Scale and offset that place the cover's or the main screen's part of the world on a w × h
-     * surface. A surface of about the scene's own shape is filled. One of another shape (either
-     * screen turned on its side, 12 Nov 2026) holds the whole part instead, centred, so nothing in
-     * the scene is cut off; its edges fade into the ground (see [draw]).
+     * surface. An upright surface is filled, as it always was. A turned one (either screen on its
+     * side, 12 Nov 2026) holds the whole part instead, centred, so nothing in the scene is cut
+     * off; its edges fade into the ground (see [draw]).
      */
     fun transform(w: Int, h: Int, main: Boolean): FloatArray {
         val r = if (main) MAIN else COVER
         val fx = w / r.width(); val fy = h / r.height()
-        val s = if (max(fx, fy) / min(fx, fy) <= 1.15f) max(fx, fy) else min(fx, fy)
+        val turned = w > h
+        val s = if (turned) min(fx, fy) else max(fx, fy)
         return floatArrayOf(s, (w - r.width() * s) / 2f - r.left * s, (h - r.height() * s) / 2f - r.top * s)
     }
 
