@@ -15,6 +15,11 @@ import kotlin.math.sqrt
  * with a Canvas). Everything is in surface pixels; [dp] scales distances and speeds.
  *
  * Rings centre on the hinge: the left edge of the tall cover screen, the crease of the main one.
+ *
+ * Both screens, both ways round (12 Nov 2026). Solco, Tronco and Duna answer to the hinge, which
+ * stays where it is on the glass when the phone turns, so they are laid out the right way up for
+ * the glass and then turned with it: on the cover held sideways, the hinge runs along the bottom
+ * (or the top). Marea answers to gravity, so its water always fills from the bottom of the view.
  */
 class Scene(
     val w: Int,
@@ -26,11 +31,28 @@ class Scene(
     /** Marea: the battery, 0 to 1, and whether it is charging (the only time its surface moves). */
     val level: Float = 1f,
     charging: Boolean = false,
+    /** The display's rotation (Surface.ROTATION_*), to tell which way a sideways surface was turned. */
+    rotation: Int = 0,
 ) {
-    val cover: Boolean = coverOverride ?: (h > w * 1.5f)
-    val cx: Float = if (cover) 0f else w / 2f
-    val cy: Float = h / 2f
-    val r: Float = hypot(max(cx, w - cx), max(cy, h - cy))
+    val cover: Boolean = coverOverride ?: FoldWatch.tall(w, h)
+    /**
+     * Quarter turns from the glass's own upright: 0 upright, 1 turned anticlockwise (the hinge edge at
+     * the bottom), 3 turned clockwise. Both screens stand upright taller than wide, so a wider
+     * surface is a turned one; the display's rotation says which way. Tiles are never turned.
+     */
+    val quarter: Int = if (coverOverride != null || w <= h) 0 else if (rotation == 3) 3 else 1
+    private val turned = quarter != 0 && style != Style.MAREA
+    /** The glass's own upright size, in which the hinge styles are laid out before turning. */
+    private val gw: Int = if (turned) h else w
+    private val gh: Int = if (turned) w else h
+    private val gcx: Float = if (cover) 0f else gw / 2f
+    private val gcy: Float = gh / 2f
+    /** Upright glass to this surface. */
+    private fun sx(x: Float, y: Float) = when { !turned -> x; quarter == 1 -> y; else -> gh - y }
+    private fun sy(x: Float, y: Float) = when { !turned -> y; quarter == 1 -> gw - x; else -> x }
+    val cx: Float = sx(gcx, gcy)
+    val cy: Float = sy(gcx, gcy)
+    val r: Float = hypot(max(gcx, gw - gcx), max(gcy, gh - gcy))
 
     /** About one grain per 4.2 dp², the density judged right in the preview, capped for the CPU. */
     val cap: Int = min(140_000, ((w / dp) * (h / dp) / 4.2f).toInt()).coerceAtLeast(1)
@@ -56,6 +78,8 @@ class Scene(
         Style.TRONCO -> genTronco()
         Style.MAREA -> genMarea()
         Style.DUNA -> genDuna()
+    }.also { k ->
+        if (turned) for (i in 0 until k) { val x = hx[i]; val y = hy[i]; hx[i] = sx(x, y); hy[i] = sy(x, y) }
     }
 
     // ---- Marea: grain filled to the battery level, foam at the surface, sediment at the floor ----
@@ -98,12 +122,12 @@ class Scene(
         var k = 0; var guard = 0
         while (k < cap && guard < cap * 40) {
             guard++
-            val x = rng.next() * w; val y = rng.next() * h
+            val x = rng.next() * gw; val y = rng.next() * gh
             // Distance downwind from the hinge, the ripples curving a little as wind does
-            val u = abs(x - cx) + .035f * h * sin(y / h * 6.2832f * 1.3f + abs(x - cx) / (w * .4f))
+            val u = abs(x - gcx) + .035f * gh * sin(y / gh * 6.2832f * 1.3f + abs(x - gcx) / (gw * .4f))
             val ph = (u / lambda) % 1f
             val ripple = if (ph < .75f) (ph / .75f).pow(1.5f) else (1f - (ph - .75f) / .25f).pow(3f)
-            val dune = .55f + .45f * sin(u / (lambda * 9f) + y / (h * .9f))
+            val dune = .55f + .45f * sin(u / (lambda * 9f) + y / (gh * .9f))
             val dens = .06f + .80f * ripple * dune
             if (rng.next() > dens) continue
             hx[k] = x; hy[k] = y
@@ -153,8 +177,8 @@ class Scene(
             if (rng.next() > t.pow(1.8f) * .92f + .08f) continue
             val rad = r * (b[0] + (b[1] - b[0]) * t) + (rng.next() - .5f) * 2f * dp
             val a = rng.next() * 6.2832f
-            val x = cx + cos(a) * rad; val y = cy + sin(a) * rad
-            if (x < 0f || y < 0f || x >= w || y >= h) continue
+            val x = gcx + cos(a) * rad; val y = gcy + sin(a) * rad
+            if (x < 0f || y < 0f || x >= gw || y >= gh) continue
             hx[k] = x; hy[k] = y
             val p = rng.next(); val base = b[3].toInt()
             col[k] = (if (p < .72f) base else if (p < .9f) (base + 1) % 3 else (base + 2) % 3).toByte()
@@ -187,8 +211,8 @@ class Scene(
             val a = rng.next() * 6.2832f
             val rr = sqrt(rng.next()) * rr0
             val wb = wob(a, rr)
-            val x = cx + cos(a) * rr * wb; val y = cy + sin(a) * rr * wb
-            if (x < 0f || y < 0f || x >= w || y >= h) continue
+            val x = gcx + cos(a) * rr * wb; val y = gcy + sin(a) * rr * wb
+            if (x < 0f || y < 0f || x >= gw || y >= gh) continue
             var dens: Float; var c: Int
             if (rr < edges[0]) { dens = .55f; c = 2 }
             else if (rr >= outer) { dens = .85f; c = 0 }
@@ -213,7 +237,9 @@ class Scene(
         val rad = (if (cover) .21f else .11f) * min(w, h)
         val phi = Math.toRadians(-60.0 + 120.0 * sky.alt).toFloat()
         val ring = r * .30f
-        return floatArrayOf(cx + cos(phi) * ring, cy - sin(phi) * ring, rad)
+        // Placed on the upright glass, then turned with it, so the disc keeps its place by the hinge
+        val x = gcx + cos(phi) * ring; val y = gcy - sin(phi) * ring
+        return floatArrayOf(sx(x, y), sy(x, y), rad)
     }
 
     // ---- Forces ----

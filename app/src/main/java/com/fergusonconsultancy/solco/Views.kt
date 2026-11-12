@@ -1,5 +1,6 @@
 package com.fergusonconsultancy.solco
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -7,11 +8,17 @@ import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
+import android.view.WindowInsets
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.cerniera.kit.Kit
+import com.cerniera.kit.Screen
+import com.cerniera.kit.px
+import com.cerniera.kit.text
 import kotlin.math.max
 import kotlin.math.min
 
@@ -24,9 +31,11 @@ private fun View.roundClip(radiusDp: Float) {
 
 /**
  * The wallpaper itself, live, in the shape of the screen Settings is open on: tall on the cover,
- * near square on the main screen. Touch moves the grain exactly as on the home screen.
+ * near square on the main screen, wide when either is turned. Touch moves the grain exactly as on
+ * the home screen. [rotation] is the display's, so a turned preview lies as the wallpaper will.
  */
-class PreviewView(c: Context, private val aspect: Float) : View(c) {
+class PreviewView(c: Context, private val aspect: Float, private val rotation: Int = 0) : View(c), Fits {
+    override var maxH = c.px(460)
     private var scene: Scene? = null
     private var back: Bitmap? = null
     private var disc: Bitmap? = null
@@ -38,7 +47,7 @@ class PreviewView(c: Context, private val aspect: Float) : View(c) {
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val avail = MeasureSpec.getSize(widthMeasureSpec)
-        val hh = min(context.px(460).toFloat(), avail * aspect)
+        val hh = min(maxH.toFloat(), avail * aspect)
         setMeasuredDimension((hh / aspect).toInt(), hh.toInt())
     }
 
@@ -53,7 +62,7 @@ class PreviewView(c: Context, private val aspect: Float) : View(c) {
         finish = Prefs.finish(context)
         val dp = resources.displayMetrics.density
         val (lvl, chg) = Power.read(context)
-        val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0), level = lvl, charging = chg)
+        val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0), level = lvl, charging = chg, rotation = rotation)
         back?.recycle(); disc?.recycle()
         back = Backdrop.paint(s, finish)
         val sky = Sky.now()
@@ -99,7 +108,7 @@ class PictureTile(
 ) : LinearLayout(c) {
     private var cache: Bitmap? = null
     private val name: TextView
-    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Palette.CHAMPAGNE }
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Kit.CHAMPAGNE }
 
     private val picture = object : View(c) {
         override fun onDraw(canvas: Canvas) {
@@ -117,14 +126,14 @@ class PictureTile(
     init {
         orientation = VERTICAL
         addView(picture, LayoutParams(-1, c.px(picHeightDp)))
-        name = c.label(title, 13f, if (chosen) Palette.CHAMPAGNE else Palette.MUTED, 500).apply { setPadding(c.px(2), c.px(9), 0, 0) }
+        name = c.text(title, 13f, if (chosen) Kit.CHAMPAGNE else Kit.MUTED, 500).apply { setPadding(c.px(2), c.px(9), 0, 0) }
         addView(name)
         setOnClickListener { onPick() }
     }
 
     fun refresh(isChosen: Boolean, repaint: Boolean) {
         chosen = isChosen
-        name.setTextColor(if (chosen) Palette.CHAMPAGNE else Palette.MUTED)
+        name.setTextColor(if (chosen) Kit.CHAMPAGNE else Kit.MUTED)
         if (repaint) { cache?.recycle(); cache = null }
         picture.invalidate()
     }
@@ -141,4 +150,78 @@ fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) 
     val disc = DiscPainter.paint(f, sky, Prefs.luna(c), d[2], dp)
     ScenePainter().draw(cv, s, f, back, disc, d[0], d[1], max(1f, dp * 1.05f * 1.6f))
     back.recycle(); disc.recycle()
+}
+
+/** A live view that keeps its own shape and is told how tall it may grow. */
+interface Fits { var maxH: Int }
+
+/**
+ * Settings in every shape of the phone (12 Nov 2026). Upright on the cover: one scrolling column,
+ * the live wallpaper and its main action first, the choices after. Anywhere wider (the cover
+ * turned, the main screen either way round): the wallpaper stands in a pane of its own, as tall as
+ * the screen allows, with its action beneath, and the choices scroll beside it. Either way the
+ * wallpaper and the action are in view at rest; only the choices sit below the fold.
+ */
+class Stage(private val a: Activity, val screen: Screen) {
+    val wide: Boolean = a.resources.configuration.let { it.screenWidthDp > it.screenHeightDp || it.smallestScreenWidthDp >= 600 }
+
+    /** Holds the live view and what goes under it; in a wide shape it fits them to the pane's height. */
+    val stage = object : LinearLayout(a) {
+        override fun onMeasure(ws: Int, hs: Int) {
+            if (MeasureSpec.getMode(hs) != MeasureSpec.UNSPECIFIED) {
+                var used = paddingTop + paddingBottom
+                var fits: Fits? = null
+                for (i in 0 until childCount) {
+                    val v = getChildAt(i)
+                    if (v is Fits) { fits = v; continue }
+                    if (v.visibility == GONE) continue
+                    measureChild(v, ws, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+                    val lp = v.layoutParams as LayoutParams
+                    used += v.measuredHeight + lp.topMargin + lp.bottomMargin
+                }
+                fits?.maxH = (MeasureSpec.getSize(hs) - used).coerceAtLeast(a.px(120))
+            }
+            super.onMeasure(ws, hs)
+        }
+    }.apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+
+    fun add(v: View, top: Int = 0, fill: Boolean = false) =
+        stage.addView(v, LinearLayout.LayoutParams(if (fill) -1 else -2, -2).apply { topMargin = top; gravity = Gravity.CENTER_HORIZONTAL })
+
+    /** Call once everything is added: returns the Activity's content. */
+    fun build(): View {
+        if (!wide) { screen.add(stage, a.px(6)); return screen.root }
+        // The panes keep clear of the bars and the camera on every side, so nothing hides under them
+        val row = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Kit.GROUND)
+            setOnApplyWindowInsetsListener { v, i ->
+                val b = i.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                v.setPadding(b.left, b.top, b.right, b.bottom)
+                WindowInsets.CONSUMED
+            }
+        }
+        stage.setPadding(a.px(24), a.px(20), a.px(8), a.px(20))
+        stage.gravity = Gravity.CENTER
+        row.addView(stage, LinearLayout.LayoutParams(0, -1, 1f))
+        row.addView(screen.root, LinearLayout.LayoutParams(0, -1, 1f))
+        return row
+    }
+
+    /**
+     * Records where the live view and the main action ended up, for the launch test: both must be
+     * in view at rest, in every shape. Written to files/layout.json once laid out.
+     */
+    fun record(root: View, live: View, action: View) {
+        root.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                if (live.height <= 0 || root.height <= 0) return
+                fun box(v: View): String { val p = IntArray(2); v.getLocationInWindow(p); return "[${p[0]}, ${p[1]}, ${p[0] + v.width}, ${p[1] + v.height}]" }
+                val inset = root.rootWindowInsets?.getInsets(WindowInsets.Type.systemBars())
+                val json = "{\"wide\": $wide, \"view\": [${root.width}, ${root.height}], \"insets\": [${inset?.left ?: 0}, ${inset?.top ?: 0}, ${inset?.right ?: 0}, ${inset?.bottom ?: 0}], " +
+                    "\"live\": ${box(live)}, \"action\": ${box(action)}}"
+                runCatching { java.io.File(a.filesDir, "layout.json").writeText(json) }
+            }
+        })
+    }
 }

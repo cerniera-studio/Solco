@@ -55,7 +55,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         runCatching {
             val range = FloatArray(2); GLES20.glGetFloatv(GLES20.GL_ALIASED_POINT_SIZE_RANGE, range, 0)
             val maxTex = IntArray(1); GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTex, 0)
-            Crash.gpu(ctx, "${GLES20.glGetString(GLES20.GL_RENDERER)}, ${GLES20.glGetString(GLES20.GL_VERSION)}, " +
+            Gpu.gpu(ctx, "${GLES20.glGetString(GLES20.GL_RENDERER)}, ${GLES20.glGetString(GLES20.GL_VERSION)}, " +
                 "points ${range[0].roundToInt()} to ${range[1].roundToInt()} px, textures to ${maxTex[0]} px")
         }
         finish = Prefs.finish(ctx)
@@ -86,6 +86,9 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     }
 
     fun stir(dir: Int, fast: Boolean) { pendingStir = dir; pendingFast = fast }
+
+    /** The display's rotation, set by the engine before a new size arrives, so a turned screen lays out the right way. */
+    @Volatile var rotation = 0
 
     fun touch(x: Float, y: Float, down: Boolean) { scene?.touch(x, y, down) }
 
@@ -127,7 +130,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val dp = ctx.resources.displayMetrics.density
                 val (lvl, chg) = Power.read(ctx)
                 builtLevel = lvl
-                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg)
+                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation)
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
                     val c = f.grain[sc.col[i].toInt()]
@@ -139,8 +142,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val back = Backdrop.paint(sc, f)
                 ready = Prepared(bw, bh, sc, f, cols, back, SystemClock.elapsedRealtime() - t0)
             } catch (t: Throwable) {
-                Crash.save(ctx, "Building the wallpaper (${bw}x$bh)", t)
-                Crash.glError(ctx, "Build failed: $t")
+                Gpu.failed(ctx, "Building the wallpaper (${bw}x$bh)", t)
+                Gpu.glError(ctx, "Build failed: $t")
                 Log.e(TAG, "build failed", t)
             } finally {
                 building = false
@@ -197,8 +200,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         } catch (t: Throwable) {
             // Never take the process down: record what failed and show the plain ground instead
             failed = true
-            Crash.save(ctx, "Drawing the wallpaper (${w}x$h)", t)
-            Crash.glError(ctx, t.toString())
+            Gpu.failed(ctx, "Drawing the wallpaper (${w}x$h)", t)
+            Gpu.glError(ctx, t.toString())
             Log.e(TAG, "frame failed", t)
             clearToGround()
         }
@@ -256,8 +259,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (!reported) {
             reported = true
             val err = GLES20.glGetError()
-            if (err != GLES20.GL_NO_ERROR) Crash.glError(ctx, "GL error 0x${Integer.toHexString(err)} on the first frame, ${w}x$h")
-            Crash.drew(ctx, s.cover, "${w}x$h, ${s.n} grains, built in $lastBuildMs ms")
+            if (err != GLES20.GL_NO_ERROR) Gpu.glError(ctx, "GL error 0x${Integer.toHexString(err)} on the first frame, ${w}x$h")
+            Gpu.drew(ctx, s.cover, "${w}x$h, ${s.n} grains, built in $lastBuildMs ms")
         }
         if (moving) wake.run()
     }
@@ -300,7 +303,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             GLES20.glCompileShader(s)
             val ok = IntArray(1)
             GLES20.glGetShaderiv(s, GLES20.GL_COMPILE_STATUS, ok, 0)
-            if (ok[0] == 0) { val log = GLES20.glGetShaderInfoLog(s); Log.e(TAG, "shader: $log"); Crash.glError(ctx, "Shader did not compile: $log") }
+            if (ok[0] == 0) { val log = GLES20.glGetShaderInfoLog(s); Log.e(TAG, "shader: $log"); Gpu.glError(ctx, "Shader did not compile: $log") }
             return s
         }
         val p = GLES20.glCreateProgram()
@@ -309,7 +312,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         GLES20.glLinkProgram(p)
         val ok = IntArray(1)
         GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, ok, 0)
-        if (ok[0] == 0) { val log = GLES20.glGetProgramInfoLog(p); Log.e(TAG, "link: $log"); Crash.glError(ctx, "Program did not link: $log") }
+        if (ok[0] == 0) { val log = GLES20.glGetProgramInfoLog(p); Log.e(TAG, "link: $log"); Gpu.glError(ctx, "Program did not link: $log") }
         return p
     }
 

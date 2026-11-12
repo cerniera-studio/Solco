@@ -13,15 +13,27 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
-import android.view.WindowInsets
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.cerniera.kit.Card
+import com.cerniera.kit.Crash
+import com.cerniera.kit.Fold
+import com.cerniera.kit.Kit
+import com.cerniera.kit.Row
+import com.cerniera.kit.Screen
+import com.cerniera.kit.Toggle
+import com.cerniera.kit.doctrineCard
+import com.cerniera.kit.primary
+import com.cerniera.kit.px
+import com.cerniera.kit.rounded
+import com.cerniera.kit.text
 import kotlin.math.min
 
 /**
- * Sipario's one screen: the scene live, a way to watch it unfold, the five scenes as painted tiles,
- * one switch, and one main action. Diagnostics fold away at the foot.
+ * Sipario's one screen, on the Kit: the scene live with a way to watch it unfold and its one main
+ * action, the five scenes as painted tiles, one switch. Diagnostics and the doctrine fold away at
+ * the foot. Laid out for every shape of the phone by [Stage].
  */
 class SiparioActivity : Activity() {
 
@@ -36,82 +48,71 @@ class SiparioActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val (scroll, col) = screen()
-        scroll.setOnApplyWindowInsetsListener { _, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars())
-            col.setPadding(px(20), px(28) + bars.top, px(20), px(40) + bars.bottom)
-            insets
-        }
+        if (Crash.show(this, "Solco")) return
+        Kit.dark = true
 
-        col.addView(label("Sipario", 46f, Palette.IVORY, display = true))
-        col.addView(label("Folded, a quiet scene. Unfold, and the door swings away from what was standing beside it.", 14.5f, Palette.MUTED).apply {
-            setPadding(0, px(8), 0, px(22))
+        val screen = Screen(this, "Sipario", "Live wallpaper \u00b7 in Solco")
+        screen.add(text("Folded, a quiet scene. Unfold, and the door swings away from what was standing beside it.", 14.5f, Kit.MUTED).apply {
+            setPadding(px(4), px(8), 0, px(14))
         })
+        val stage = Stage(this, screen)
 
         // The scene, live, in this screen's shape. The button plays the other screen's arrival.
         val bounds = windowManager.currentWindowMetrics.bounds
-        val onCover = bounds.height() > bounds.width() * 1.5f
-        preview = SiparioView(this, !onCover)
-        col.addView(LinearLayout(this).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            addView(preview, LinearLayout.LayoutParams(-2, -2))
-        }, LinearLayout.LayoutParams(-1, -2))
-        play = button(if (preview.main) "Play the fold" else "Play the unfold", primary = false) { flip() }
-        col.addView(play, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(14); gravity = Gravity.CENTER_HORIZONTAL })
-        col.addView(label("Touch the scene. Nothing moves at rest.", 12.5f, Palette.MUTED).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, px(10), 0, 0)
-        }, LinearLayout.LayoutParams(-1, -2))
+        val onMain = !FoldWatch.tall(bounds.width(), bounds.height())
+        preview = SiparioView(this, onMain, bounds.height().toFloat() / bounds.width().coerceAtLeast(1))
+        stage.add(preview)
+        play = primary(if (preview.main) "Play the fold" else "Play the unfold", filled = false) { flip() }
+        stage.add(play, px(14))
+        stage.add(text("Touch the scene. Nothing moves at rest.", 12.5f, Kit.MUTED).apply { gravity = Gravity.CENTER_HORIZONTAL }, px(10))
+        action = primary("Set as wallpaper") { setWallpaper() }
+        stage.add(action, px(16), fill = true)
+        val root = stage.build()
 
         // What this scene does, folded and unfolded
-        name = label("", 28f, Palette.IVORY, display = true).apply { setPadding(px(2), px(26), 0, px(8)) }
-        folded = label("", 14f, Palette.MUTED)
-        unfolded = label("", 14f, Palette.MUTED).apply { setPadding(0, px(6), 0, 0) }
-        col.addView(name); col.addView(folded); col.addView(unfolded)
+        name = text("", 28f, Kit.INK, displayFace = true).apply { setPadding(px(4), px(26), 0, px(8)) }
+        folded = text("", 14f, Kit.MUTED).apply { setPadding(px(4), 0, 0, 0) }
+        unfolded = text("", 14f, Kit.MUTED).apply { setPadding(px(4), px(6), 0, 0) }
+        screen.add(name); screen.add(folded); screen.add(unfolded)
 
         // The five scenes, each a still of its cover screen
-        col.addView(eyebrow("Scene"))
+        screen.section("Scene")
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         Act.values().forEachIndexed { i, a ->
             val t = PictureTile(this, a.title, Prefs.act(this) == a, 196, { cv, w, h -> paintAct(cv, w, h, a) }) { pick(a) }
             tiles += a to t
             strip.addView(t, LinearLayout.LayoutParams(px(84), -2).apply { if (i > 0) leftMargin = px(10) })
         }
-        col.addView(HorizontalScrollView(this).apply {
+        screen.add(HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             addView(strip)
         })
 
-        col.addView(eyebrow("Motion"))
-        col.addView(card().apply {
-            addView(row("Concentrato", "A fast fold plays the arrival a third quicker, with a quarter of the ornament. Shared with Solco.",
+        screen.section("Motion")
+        screen.add(Card(this).apply {
+            row(Row(this@SiparioActivity, "Concentrato", "A fast fold plays the arrival a third quicker, with a quarter of the ornament. Shared with Solco.",
                 Toggle(this@SiparioActivity, Prefs.concentrato(this@SiparioActivity)) { Prefs.setConcentrato(this@SiparioActivity, it) }))
         })
 
-        action = button("Set as wallpaper") { setWallpaper() }
-        col.addView(action, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(30) })
+        diag = text("", 12.5f, Kit.MUTED)
+        screen.add(Fold(this, "Diagnostics", "What the wallpaper has seen on this phone").apply { body.addView(diag) }, px(30))
+        screen.add(doctrineCard(DOCTRINE_NOTES), px(12))
 
-        val head = eyebrow("Diagnostics  +").apply { setTextColor(Palette.MUTED) }
-        diag = label("", 12.5f, Palette.MUTED).apply { visibility = View.GONE; setPadding(px(4), 0, 0, 0) }
-        head.setOnClickListener {
-            diag.visibility = if (diag.visibility == View.GONE) View.VISIBLE else View.GONE
-            head.text = if (diag.visibility == View.GONE) "DIAGNOSTICS  +" else "DIAGNOSTICS  −"
-            fillDiag()
-        }
-        col.addView(head); col.addView(diag)
-
-        setContentView(scroll)
-        window.decorView.setBackgroundColor(Palette.GROUND)
+        setContentView(root)
+        window.decorView.setBackgroundColor(Kit.GROUND)
+        stage.record(root, preview, action)
         describe(Prefs.act(this))
     }
 
     override fun onResume() {
         super.onResume()
+        if (!::action.isInitialized) return
         val info = runCatching { WallpaperManager.getInstance(this).wallpaperInfo }.getOrNull()
         val ours = info?.serviceName == SiparioWallpaperService::class.java.name
         action.text = if (ours) "Sipario is your wallpaper" else "Set as wallpaper"
-        action.background = if (ours) rounded(Palette.RAISED, px(22).toFloat(), Palette.HAIRLINE, px(1)) else rounded(Palette.CHAMPAGNE, px(22).toFloat())
-        action.setTextColor(if (ours) Palette.IVORY else Palette.GROUND)
+        action.background = if (ours) rounded(0, px(28).toFloat(), Kit.HAIRLINE, px(1)) else rounded(Kit.CHAMPAGNE, px(28).toFloat())
+        action.setTextColor(if (ours) Kit.INK else Kit.GROUND)
         fillDiag()
     }
 
@@ -155,6 +156,16 @@ class SiparioActivity : Activity() {
             runCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
         }
     }
+
+    companion object {
+        /** How Sipario answers each principle, under the doctrine at the foot of its Settings. */
+        val DOCTRINE_NOTES = listOf(
+            "The monolithic membrane" to "Each scene is one world across both screens: a touch on one half can move something on the other.",
+            "Concentrato" to "A fast fold plays the arrival a third quicker with a quarter of the ornament. The trajectory stays.",
+            "Giulietta" to "No controls on the scenes. Folded, a quiet scene; unfolding adds the rest of the story and never zooms.",
+            "Nothing moves at rest" to "A scene draws on a fold, a touch, or a minute's change of light, and is still otherwise.",
+        )
+    }
 }
 
 /** A scene at rest on the cover screen, for the tiles. */
@@ -167,7 +178,10 @@ fun paintAct(cv: Canvas, w: Int, h: Int, a: Act) {
  * The scene, live, in the cover's or the main screen's shape. [play] switches shape and plays the
  * arrival exactly as a fold would. Touch reaches the scene as on the home screen.
  */
-class SiparioView(c: Context, var main: Boolean) : View(c) {
+class SiparioView(c: Context, var main: Boolean, private val here: Float = 0f) : View(c), Fits {
+    override var maxH = c.px(460)
+    /** The screen Settings is open on, whose real shape (turned or not) the preview takes. */
+    private val onMain = main
     private var scene: SipScene = Prefs.act(c).make()
     private val env = Env()
     private var arrivedAt = SystemClock.uptimeMillis() - 1_000_000L
@@ -179,11 +193,11 @@ class SiparioView(c: Context, var main: Boolean) : View(c) {
         }
     }
 
-    private val aspect get() = if (main) World.H / World.W else World.COVER.height() / World.COVER.width()
+    private val aspect get() = if (main == onMain && here > 0f) here else if (main) World.H / World.W else World.COVER.height() / World.COVER.width()
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val avail = MeasureSpec.getSize(widthMeasureSpec)
-        val hh = min(context.px(460).toFloat(), avail * aspect)
+        val hh = min(maxH.toFloat(), avail * aspect)
         setMeasuredDimension((hh / aspect).toInt(), hh.toInt())
     }
 

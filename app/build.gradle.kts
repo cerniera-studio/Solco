@@ -48,3 +48,8 @@ android {
         checkReleaseBuilds = false
     }
 }
+
+dependencies {
+    // Cerniera's Kit: colours, type, controls and crash reports, shared by the family
+    implementation(project(":kit"))
+}

@@ -8,16 +8,13 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Color
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.SurfaceHolder
+import com.cerniera.kit.Kit
 
 /**
  * Sipario's wallpaper. The scenes are drawings rather than grain, so this engine draws with a
@@ -32,7 +29,7 @@ class SiparioWallpaperService : WallpaperService() {
     private object Seen { var tall: Boolean? = null }
 
     private inner class SiparioEngine : Engine(), SharedPreferences.OnSharedPreferenceChangeListener,
-        SensorEventListener, Choreographer.FrameCallback {
+        Choreographer.FrameCallback {
 
         private var w = 0
         private var h = 0
@@ -44,8 +41,6 @@ class SiparioWallpaperService : WallpaperService() {
         private val env = Env()
         private var arrivedAt = 0L
         private var fast = false
-        private var sensors: SensorManager? = null
-        private var hinge: Sensor? = null
         private var listening = false
         private var failed = false
         private var reported = false
@@ -59,12 +54,10 @@ class SiparioWallpaperService : WallpaperService() {
             setTouchEventsEnabled(true)
             val c = this@SiparioWallpaperService
             Prefs.of(c).registerOnSharedPreferenceChangeListener(this)
-            sensors = c.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-            hinge = sensors?.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
-            // The hinge is heard for as long as the wallpaper is set, not only while it is in view: the
-            // screen goes dark before the hinge finishes moving, so a visible-only listener never
-            // has the readings a fold's speed is measured from. The sensor reports only when the hinge moves.
-            hinge?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+            // The hinge (the Kit's) is heard for as long as the wallpaper is set, not only while it is in
+            // view: the screen goes dark before the hinge finishes moving, so a visible-only listener
+            // never has the readings a fold's speed is measured from
+            FoldWatch.listen(c)
             arrivedAt = SystemClock.uptimeMillis() - 1_000_000L
         }
 
@@ -73,7 +66,8 @@ class SiparioWallpaperService : WallpaperService() {
             // One UI hands over a zero-size surface mid-fold. It is neither screen, so it must not count as an arrival.
             if (width <= 0 || height <= 0) return
             w = width; h = height
-            tall = height > width * 1.5f
+            // Cover or main from the shape, either way round: turning the cover is not a fold
+            tall = FoldWatch.tall(width, height)
             SipDiag.seen(this@SiparioWallpaperService, tall, width, height)
             if (visible) arrive() else frame()
         }
@@ -116,9 +110,6 @@ class SiparioWallpaperService : WallpaperService() {
             }
         }
 
-        override fun onSensorChanged(e: SensorEvent) { if (e.values.isNotEmpty()) FoldWatch.hinge(e.values[0]) }
-        override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
-
         override fun onTouchEvent(e: MotionEvent) {
             if (e.actionMasked == MotionEvent.ACTION_DOWN && w > 0) {
                 val t = World.transform(w, h, !tall)
@@ -139,7 +130,7 @@ class SiparioWallpaperService : WallpaperService() {
         }
 
         override fun onComputeColors(): WallpaperColors =
-            WallpaperColors(Color.valueOf(0xFF0E1311.toInt()), Color.valueOf(if (act == Act.FANALE) 0xFFB8141E.toInt() else 0xFFD9BB86.toInt()), Color.valueOf(0xFFF6F1E6.toInt()))
+            WallpaperColors(Color.valueOf(Kit.Fixed.VISCONTI_GROUND), Color.valueOf(if (act == Act.FANALE) Kit.Fixed.LACQUER else Kit.Fixed.CHAMPAGNE), Color.valueOf(Kit.Fixed.IVORY))
 
         override fun doFrame(frameTimeNanos: Long) {
             scheduled = false
@@ -169,7 +160,7 @@ class SiparioWallpaperService : WallpaperService() {
             try {
                 c = runCatching { holder.lockHardwareCanvas() }.getOrNull() ?: holder.lockCanvas()
                 if (c == null) return false
-                if (failed) { c.drawColor(0xFF0E1311.toInt()); return false }
+                if (failed) { c.drawColor(Kit.Fixed.VISCONTI_GROUND); return false }
                 val now = SystemClock.uptimeMillis()
                 env.refreshSky()
                 env.main = !tall
@@ -182,9 +173,9 @@ class SiparioWallpaperService : WallpaperService() {
             } catch (t: Throwable) {
                 // Never take the process down: record what failed and show the plain ground instead
                 failed = true
-                Crash.save(this@SiparioWallpaperService, "Sipario drawing ${act.title} (${w}x$h)", t)
+                Gpu.failed(this@SiparioWallpaperService, "Sipario drawing ${act.title} (${w}x$h)", t)
                 Log.e(SolcoRenderer.TAG, "Sipario frame failed", t)
-                runCatching { c?.drawColor(0xFF0E1311.toInt()) }
+                runCatching { c?.drawColor(Kit.Fixed.VISCONTI_GROUND) }
                 busy = false
             } finally {
                 if (c != null) runCatching { holder.unlockCanvasAndPost(c) }
@@ -195,7 +186,7 @@ class SiparioWallpaperService : WallpaperService() {
         override fun onDestroy() {
             Prefs.of(this@SiparioWallpaperService).unregisterOnSharedPreferenceChangeListener(this)
             listen(false)
-            if (hinge != null) sensors?.unregisterListener(this)
+            FoldWatch.unlisten()
             stop()
             super.onDestroy()
         }

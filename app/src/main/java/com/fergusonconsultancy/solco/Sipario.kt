@@ -1,5 +1,7 @@
 package com.fergusonconsultancy.solco
 
+import com.cerniera.kit.Kit
+import com.cerniera.kit.withAlpha
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -42,10 +44,19 @@ object World {
     /** The cover screen within the main screen's world: its right half, 24 px in and 8 px up. */
     val COVER = RectF(1152f, -8f, 2232f, 2512f)
 
-    /** Scale and offset that fill a w × h surface with the cover's or the main screen's part of the world. */
+    private val MAIN = RectF(0f, 0f, W, H)
+
+    /**
+     * Scale and offset that place the cover's or the main screen's part of the world on a w × h
+     * surface. An upright surface is filled, as it always was. A turned one (either screen on its
+     * side, 12 Nov 2026) holds the whole part instead, centred, so nothing in the scene is cut
+     * off; its edges fade into the ground (see [draw]).
+     */
     fun transform(w: Int, h: Int, main: Boolean): FloatArray {
-        val r = if (main) RectF(0f, 0f, W, H) else COVER
-        val s = max(w / r.width(), h / r.height())
+        val r = if (main) MAIN else COVER
+        val fx = w / r.width(); val fy = h / r.height()
+        val turned = w > h
+        val s = if (turned) min(fx, fy) else max(fx, fy)
         return floatArrayOf(s, (w - r.width() * s) / 2f - r.left * s, (h - r.height() * s) / 2f - r.top * s)
     }
 
@@ -54,6 +65,10 @@ object World {
         val t = transform(w, h, e.main)
         c.save(); c.translate(t[1], t[2]); c.scale(t[0], t[0])
         val busy = scene.draw(c, e)
+        // Held whole on a surface of another shape: the world's edges fade into its ground
+        val r = if (e.main) MAIN else COVER
+        val l = (-t[1] / t[0]); val tp = (-t[2] / t[0]); val rt = (w - t[1]) / t[0]; val bt = (h - t[2]) / t[0]
+        if (l < r.left - 1f || rt > r.right + 1f || tp < r.top - 1f || bt > r.bottom + 1f) frame(c, r, RectF(l, tp, rt, bt), e)
         c.restore()
         return busy
     }
@@ -138,6 +153,14 @@ private fun mix(a: Int, b: Int, t: Float): Int {
     return (r shl 16) or (g shl 8) or bl
 }
 private fun op(rgb: Int) = rgb or 0xFF000000.toInt()
+
+// The family's fixed colours, from the Kit (RGB only: mix and al add their own alpha). The day ends
+// of each mix are Avorio, which began here as Sipario's daylight.
+private const val GROUND = Kit.Fixed.VISCONTI_GROUND and 0xFFFFFF
+private const val IVORY = Kit.Fixed.IVORY and 0xFFFFFF
+private const val CHAMPAGNE = Kit.Fixed.CHAMPAGNE and 0xFFFFFF
+/** Visconti green (Fold Widgets' glass), exact. Goccia's leaf was an approximation of it (#173A2C) until 12 Nov 2026. */
+private const val VISCONTI_GREEN = Kit.Fixed.VISCONTI_GREEN and 0xFFFFFF
 private fun al(rgb: Int, a: Float) = withAlpha(rgb, a)
 private fun deg(rad: Float) = rad * 180f / PIf
 
@@ -152,10 +175,10 @@ private fun stroke(w: Float, color: Int, cap: Paint.Cap = Paint.Cap.BUTT): Paint
 
 private class Base(e: Env) {
     val d = e.day
-    val ground = mix(0x0E1311, 0xE9E3D6, d)
+    val ground = mix(GROUND, 0xE9E3D6, d)
     val ground2 = mix(0x16201A, 0xF4EFE5, d)
-    val ink = mix(0xF6F1E6, 0x1D1B19, d)
-    val champ = mix(0xD9BB86, 0x9A7A45, d)
+    val ink = mix(IVORY, 0x1D1B19, d)
+    val champ = mix(CHAMPAGNE, 0x9A7A45, d)
     val lightC = mix(0xE2A857, 0xFFFFFF, d)
     val lightA = lerp(.09f, .32f, d)
 }
@@ -175,6 +198,27 @@ private fun glowAt(c: Canvas, x: Float, y: Float, rgb: Int, lv: Float, r: Float 
     val v = cl(lv)
     c.drawCircle(x, y, r, shaded(RadialGradient(x, y, r, intArrayOf(al(rgb, .9f * v), al(rgb, .42f * v), al(rgb, 0f)), floatArrayOf(0f, .18f, 1f), Shader.TileMode.CLAMP)))
     c.drawCircle(x, y, 8f, fill(al(0xFFF4E0, v)))
+}
+
+/**
+ * The margins round a world held whole on a surface of another shape: the ground, flat, with the
+ * scene's own edges fading into it over [FADE] world pixels, so the world reads as set into the
+ * screen rather than cut out of it.
+ */
+private const val FADE = 120f
+private fun frame(c: Canvas, r: RectF, view: RectF, e: Env) {
+    val p = Base(e)
+    val g = op(mix(p.ground2, p.ground, .5f))
+    val clear = g and 0xFFFFFF
+    val f = fill(g)
+    if (view.left < r.left) c.drawRect(view.left, view.top, r.left, view.bottom, f)
+    if (view.right > r.right) c.drawRect(r.right, view.top, view.right, view.bottom, f)
+    if (view.top < r.top) c.drawRect(view.left, view.top, view.right, r.top, f)
+    if (view.bottom > r.bottom) c.drawRect(view.left, r.bottom, view.right, view.bottom, f)
+    if (view.left < r.left - 1f) c.drawRect(r.left, r.top, r.left + FADE, r.bottom, shaded(LinearGradient(r.left, 0f, r.left + FADE, 0f, g, clear, Shader.TileMode.CLAMP)))
+    if (view.right > r.right + 1f) c.drawRect(r.right - FADE, r.top, r.right, r.bottom, shaded(LinearGradient(r.right, 0f, r.right - FADE, 0f, g, clear, Shader.TileMode.CLAMP)))
+    if (view.top < r.top - 1f) c.drawRect(r.left, r.top, r.right, r.top + FADE, shaded(LinearGradient(0f, r.top, 0f, r.top + FADE, g, clear, Shader.TileMode.CLAMP)))
+    if (view.bottom > r.bottom + 1f) c.drawRect(r.left, r.bottom - FADE, r.right, r.bottom, shaded(LinearGradient(0f, r.bottom, 0f, r.bottom - FADE, g, clear, Shader.TileMode.CLAMP)))
 }
 
 /** The same seeded generator as the browser preview (mulberry32), so the tree grows the same way. */
@@ -263,7 +307,7 @@ private class Catenaria : SipScene {
 
     override fun draw(c: Canvas, e: Env): Boolean {
         val p = Base(e); val d = e.day; val t = e.t / e.k
-        val bead = mix(0xD9BB86, 0x9A7A45, d); val beadD = mix(0x6E5A3A, 0x5A4526, d); val stone = mix(0xF1EADB, 0x2B2D2A, d); val glowC = 0xD9BB86
+        val bead = mix(CHAMPAGNE, 0x9A7A45, d); val beadD = mix(0x6E5A3A, 0x5A4526, d); val stone = mix(0xF1EADB, 0x2B2D2A, d); val glowC = CHAMPAGNE
         paintGround(c, p, e)
         var busy = e.main && t < 4.2f || !e.main && t < 3f
         val amps = FloatArray(chains.size) { amp(it, e) }
@@ -637,7 +681,7 @@ private class Fanale : SipScene {
             c.drawCircle(x, cy, 620f, shaded(RadialGradient(x, cy, 620f, al(0xB8141E, .16f * (1f + flash)), al(0xB8141E, 0f), Shader.TileMode.CLAMP)))
         }
         val shoulder = Path().apply { moveTo(240f, cy - 250f); cubicTo(700f, cy - 262f, 1556f, cy - 262f, W - 240f, cy - 250f) }
-        c.drawPath(shoulder, stroke(3f, al(0xD9BB86, .26f)))
+        c.drawPath(shoulder, stroke(3f, al(CHAMPAGNE, .26f)))
         c.drawRect(-300f, 1480f, W + 300f, H + 300f, shaded(LinearGradient(0f, 1480f, 0f, H, op(mix(0x0B0E0E, 0x2A302E, d)), op(mix(0x121716, 0x343B39, d)), Shader.TileMode.CLAMP)))
         val lv = lerp(1f, .82f, d) * (1f + flash)
         val runL = if (main) cl(t / .8f) else 1f; val runBar = if (main) cl((t - .8f) / .32f) else 1f; val tb = 1.12f
@@ -751,12 +795,12 @@ private class Goccia : SipScene {
             cubicTo(-r, -r * .3f, -r * .5f, -r * .9f, 0f, -r * 1.5f); close()
         }
         c.drawPath(path, shaded(RadialGradient(-r * .12f, -r * .15f, r * 1.05f,
-            intArrayOf(al(0xF6F1E6, .16f), al(ac, .32f), al(ac, .62f)), floatArrayOf(0f, .7f, 1f), Shader.TileMode.CLAMP)))
-        c.drawPath(path, stroke(2f, al(0xF6F1E6, .38f)))
+            intArrayOf(al(IVORY, .16f), al(ac, .32f), al(ac, .62f)), floatArrayOf(0f, .7f, 1f), Shader.TileMode.CLAMP)))
+        c.drawPath(path, stroke(2f, al(IVORY, .38f)))
         c.save(); c.rotate(deg(-.5f), -r * .38f, -r * .18f)
         c.drawOval(-r * .38f - r * .16f, -r * .18f - r * .24f, -r * .38f + r * .16f, -r * .18f + r * .24f, fill(al(0xFFFFFF, .85f)))
         c.restore()
-        c.drawArc(RectF(-r * .68f, r * .12f - r * .68f, r * .68f, r * .12f + r * .68f), 63f, 72f, false, stroke(3f, al(0xD9BB86, .5f)))
+        c.drawArc(RectF(-r * .68f, r * .12f - r * .68f, r * .68f, r * .12f + r * .68f), 63f, 72f, false, stroke(3f, al(CHAMPAGNE, .5f)))
         c.restore()
     }
 
@@ -768,8 +812,8 @@ private class Goccia : SipScene {
         val p = Base(e); val d = e.day; val t = e.t / e.k; val main = e.main
         paintGround(c, p, e)
         var busy = if (main) t < 3.4f else t < 1.6f
-        val leaf = op(mix(0x173A2C, 0x3F6447, d)); val rib = al(mix(0xD9BB86, 0xE8E2CF, d), .42f)
-        val ringC = mix(0xF6F1E6, 0xFFFFFF, d)
+        val leaf = op(mix(VISCONTI_GREEN, 0x3F6447, d)); val rib = al(mix(CHAMPAGNE, 0xE8E2CF, d), .42f)
+        val ringC = mix(IVORY, 0xFFFFFF, d)
         fun bob(i: Int): Float {
             var o = 0f
             for (b in bobs) { if (b.i != i) continue; val a = (e.now - b.t) / 1000f; if (a < 2.5f) { o += 30f * sway(a, 8f, .45f); busy = true } }
@@ -807,7 +851,7 @@ private class Goccia : SipScene {
                     if (y < wy) drop(c, x, y, .22f, 1f, 1f)
                 }
                 val fl = e.orn * exp(-a / .25f)
-                if (fl > .02f) c.drawCircle(tipX, wy, 260f, shaded(RadialGradient(tipX, wy, 260f, al(0xF6F1E6, .5f * fl), al(0xF6F1E6, 0f), Shader.TileMode.CLAMP)))
+                if (fl > .02f) c.drawCircle(tipX, wy, 260f, shaded(RadialGradient(tipX, wy, 260f, al(IVORY, .5f * fl), al(IVORY, 0f), Shader.TileMode.CLAMP)))
             }
         }
         for (rp in rips) {

@@ -1,5 +1,6 @@
 package com.fergusonconsultancy.solco
 
+import com.cerniera.kit.withAlpha
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint

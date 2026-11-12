@@ -7,6 +7,9 @@ WP=$PKG/.SolcoWallpaperService
 adb install -r Solco.apk
 adb logcat -c
 
+# Every shape of the phone first, so it always reports (12 Nov 2026)
+bash tools/shapes.sh
+
 # Settings: the live preview, then a swipe through the grain
 adb shell am start -n $PKG/.SettingsActivity
 sleep 8
@@ -47,7 +50,7 @@ adb shell input swipe 500 1800 500 400 300
 sleep 1.5
 adb exec-out screencap -p > shot-settings-scrolled.png
 
-# The Fold's main screen at its real size: Solco centred on the crease, in Rosso
+# The Fold's main screen at its real size: Solco centred on the crease, in Notte
 prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">NOTTE</string>"
 adb shell wm size 2256x2504   # the Fold 8 Ultra main screen, as Diagnostics reported it
 sleep 3
@@ -123,6 +126,12 @@ done
 
 adb logcat -d > logcat.txt
 grep -E "Solco|solco|AndroidRuntime|FATAL" logcat.txt > app-log.txt || true
+# A shape that hides the wallpaper or its action, or a turn that reads as a fold, fails the run
+if grep -q "::error::" shapes.txt 2>/dev/null; then
+  echo "::error::a shape check failed; see shapes.txt in the release"
+  grep "::error::" shapes.txt
+  exit 1
+fi
 # Only Solco's own failures count: the emulator's stock wallpaper picker sometimes crashes by itself
 if grep -A1 "FATAL EXCEPTION" app-log.txt | grep -q "Process: $PKG" || grep -qE "build failed|frame failed" app-log.txt; then
   echo "::error::Solco failed on the emulator; see app-log.txt in the release"
