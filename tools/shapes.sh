@@ -62,6 +62,17 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
   prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">VISCONTI</string><string name=\"sipario\">GOCCIA</string>"
   adb shell run-as $PKG rm -f files/layout.json
   adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
+  # The emulator sometimes ignores a rotation: ask again until the screen really is the right way round
+  for try in 1 2 3; do
+    wide=$(adb shell run-as $PKG cat files/layout.json 2>/dev/null | python3 -c "import sys,json;v=json.load(sys.stdin)['view'];print(int(v[0]>v[1]))" 2>/dev/null)
+    want=$([ "$4" = 0 ] && echo 0 || echo 1)
+    [ "$wide" = "$want" ] && break
+    echo "rotation not applied (try $try), asking again"
+    adb shell settings put system user_rotation 0; sleep 1; adb shell settings put system user_rotation "$4"; sleep 3
+    adb shell run-as $PKG rm -f files/layout.json
+    adb shell am force-stop $PKG; adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
+  done
+  [ "$wide" = "$want" ] || echo "::error::$name: the screen never turned" | tee -a shapes.txt
   adb exec-out screencap -p > "shot-shape-$name-solco.png"
   check "Solco settings, $name" | tee -a shapes.txt
   adb shell run-as $PKG rm -f files/layout.json
@@ -69,9 +80,9 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
   adb exec-out screencap -p > "shot-shape-$name-sipario.png"
   check "Sipario settings, $name" | tee -a shapes.txt
   adb shell am force-stop $PKG
-  # The emulator's wallpaper preview stays upright when the display turns, so a turned wallpaper
-  # is drawn on a surface of the turned size instead: the same short, wide glass the phone would give
-  if [ "$4" != 0 ]; then adb shell settings put system user_rotation 0; up=$2; adb shell wm size "${up#*x}x${up%x*}"; sleep 3; fi
+  # The system's wallpaper preview is locked upright, so on the emulator these stay upright even in
+  # the landscape shapes. The turned wallpaper is seen in the Settings previews above, which draw the
+  # same scenes on the turned screen's own shape.
   wallpaper $WP "shot-shape-$name-wp-solco"
   prefs "<string name=\"style\">DUNA</string><string name=\"finish\">TABACCO</string>"
   wallpaper $WP "shot-shape-$name-wp-duna"
