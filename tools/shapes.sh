@@ -69,6 +69,9 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
   adb exec-out screencap -p > "shot-shape-$name-sipario.png"
   check "Sipario settings, $name" | tee -a shapes.txt
   adb shell am force-stop $PKG
+  # The emulator's wallpaper preview stays upright when the display turns, so a turned wallpaper
+  # is drawn on a surface of the turned size instead: the same short, wide glass the phone would give
+  if [ "$4" != 0 ]; then adb shell settings put system user_rotation 0; up=$2; adb shell wm size "${up#*x}x${up%x*}"; sleep 3; fi
   wallpaper $WP "shot-shape-$name-wp-solco"
   prefs "<string name=\"style\">DUNA</string><string name=\"finish\">TABACCO</string>"
   wallpaper $WP "shot-shape-$name-wp-duna"
@@ -87,8 +90,8 @@ for r in 1 0 3 0; do adb shell settings put system user_rotation $r; sleep 4; do
 adb exec-out screencap -p > shot-shape-cover-turned-back.png
 fold=$(adb shell run-as $PKG cat shared_prefs/solco.xml 2>/dev/null | grep -o 'name="last_fold">[^<]*')
 if [ -n "$fold" ]; then echo "::error::turning the cover counted as a fold: $fold"; else echo "::notice::turning the cover both ways: no fold logged"; fi | tee -a shapes.txt
-# And a real unfold still counts: the cover becomes the main screen
-shape 1503x1568 280 0; sleep 4
+# And a real unfold still counts: the cover becomes the main screen (a size change, as before)
+adb shell wm size 1503x1568; sleep 8
 fold=$(adb shell run-as $PKG cat shared_prefs/solco.xml 2>/dev/null | grep -o 'name="last_fold">[^<]*')
 if [ -n "$fold" ]; then echo "::notice::an unfold still counts: $fold"; else echo "::error::unfolding no longer counts as a fold"; fi | tee -a shapes.txt
 adb shell input keyevent KEYCODE_BACK; sleep 1
