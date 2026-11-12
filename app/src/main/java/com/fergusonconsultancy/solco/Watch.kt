@@ -48,7 +48,12 @@ object FoldWatch {
      */
     @JvmStatic @Synchronized fun listen(c: Context): Boolean {
         users++
-        val h = hinge ?: Hinge(c.applicationContext, object : Hinge.Listener {}).also { hinge = it; it.start() }
+        val h = hinge ?: Hinge(c.applicationContext, object : Hinge.Listener {
+            // The swing is timed the moment the hinge reaches open or closed, while its readings are
+            // fresh. The wallpaper may only see the new screen seconds later (folding with an app open,
+            // or before unlocking), by when the last 700 ms hold no movement at all.
+            override fun onFold(opened: Boolean, fast: Boolean) { swing(hinge?.speed() ?: 0f) }
+        }).also { hinge = it; it.start() }
         return h.present
     }
 
@@ -57,12 +62,26 @@ object FoldWatch {
         if (users == 0) { hinge?.stop(); hinge = null }
     }
 
+    /** The last complete swing: its speed and when it ended. */
+    private var swingSpeed = 0f
+    private var swingAt = 0L
+
+    @Synchronized private fun swing(speed: Float) {
+        if (speed <= 0f) return
+        swingSpeed = speed; swingAt = android.os.SystemClock.elapsedRealtime()
+    }
+
     /**
      * Whether the hinge swung fast just before the screens switched, by the Kit's measure (degrees a
-     * second over the last 700 ms, fast above [Hinge.FAST]: still an estimate, to be tuned on the Fold).
+     * second over 700 ms, fast above [Hinge.FAST]: still an estimate, to be tuned on the Fold).
+     * A screen that arrives mid-swing reads the hinge as it moves; one that arrives later (an app was
+     * open, or the phone was locked) takes the swing that finished within the last 15 s.
      */
     @JvmStatic @Synchronized fun fast(c: Context): Boolean {
-        val speed = hinge?.takeIf { it.present }?.speed() ?: 0f
+        val live = hinge?.takeIf { it.present }?.speed() ?: 0f
+        val recent = swingAt > 0L && android.os.SystemClock.elapsedRealtime() - swingAt < 15_000L
+        val speed = if (live > 0f) live else if (recent) swingSpeed else 0f
+        swingAt = 0L
         if (speed <= 0f) { Diag.fold(c, -1, false); return false }
         val fast = speed > Hinge.FAST
         Diag.fold(c, speed.roundToInt(), fast)
