@@ -1,11 +1,12 @@
 package com.fergusonconsultancy.solco
 
 import android.app.Application
+import com.cerniera.kit.Crash
 
-/** Keeps a record of any crash, so it can be read and shared from Settings on the phone. */
+/** Keeps a record of any crash (through the Kit), shown on the next open of Settings with Share and Copy. */
 class SolcoApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        Crash.install(this)
+        Crash.install(this, "Solco")
     }
 }

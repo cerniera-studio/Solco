@@ -79,8 +79,8 @@ public class SolcoWallpaperService extends WallpaperService {
         private boolean visible;
         private boolean tall = true;
         private SensorManager sensors;
-        private Sensor hinge;
         private boolean listening;
+        private int rotation;
 
         private Sensor gravity;
         private boolean tilting;
@@ -139,21 +139,33 @@ public class SolcoWallpaperService extends WallpaperService {
             view.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
             Prefs.of(c).registerOnSharedPreferenceChangeListener(this);
             sensors = (SensorManager) c.getSystemService(Context.SENSOR_SERVICE);
-            hinge = sensors != null ? sensors.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) : null;
-            Diag.hinge(c, hinge != null);
-            // Heard for as long as the wallpaper is set: the screen goes dark before the hinge finishes
-            // moving, so a visible-only listener never had a fold's readings. It reports only on movement.
-            if (hinge != null) sensors.registerListener(this, hinge, SensorManager.SENSOR_DELAY_UI);
+            // The hinge (the Kit's) is heard for as long as the wallpaper is set: the screen goes dark
+            // before the hinge finishes moving, so a visible-only listener never had a fold's readings
+            Diag.hinge(c, FoldWatch.listen(c));
         }
 
         @Override
         public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+            // Before the renderer hears of the new size, so a turned screen is built the right way round
+            rotation = rotation();
+            if (renderer != null) renderer.setRotation(rotation);
             super.onSurfaceChanged(holder, format, width, height);
             // One UI hands over a zero-size surface mid-fold: neither screen, so not an arrival
             if (width <= 0 || height <= 0) return;
-            tall = height > width * 1.5f;
+            // Cover or main from the shape, either way round: turning the cover is not a fold
+            tall = FoldWatch.tall(width, height);
             Diag.seen(SolcoWallpaperService.this, tall, width, height, displayId());
             if (visible) arrive();
+        }
+
+        /** The display's rotation (Surface.ROTATION_*), for which way a turned screen faces. */
+        private int rotation() {
+            try {
+                Context d = getDisplayContext();
+                return d != null && d.getDisplay() != null ? d.getDisplay().getRotation() : 0;
+            } catch (Throwable t) {
+                return 0;
+            }
         }
 
         private int displayId() {
@@ -224,15 +236,22 @@ public class SolcoWallpaperService extends WallpaperService {
             int type = e.sensor.getType();
             if (type == Sensor.TYPE_GRAVITY || type == Sensor.TYPE_ACCELEROMETER) {
                 if (view == null || e.values.length < 2) return;
-                // Gravity across the screen: device x to the right, device y up, so screen y is flipped
-                final float gx = -e.values[0], gy = e.values[1];
+                // Gravity across the screen: device x to the right, device y up, so screen y is flipped;
+                // turned, the screen's axes are the device's turned with it
+                final float ax = e.values[0], ay = e.values[1];
+                final float gx, gy;
+                switch (rotation) {
+                    case 1: gx = ay; gy = -ax; break;
+                    case 2: gx = ax; gy = -ay; break;
+                    case 3: gx = -ay; gy = ax; break;
+                    default: gx = -ax; gy = ay;
+                }
                 if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.35f) return;
                 lastGx = gx; lastGy = gy;
                 view.queueEvent(() -> renderer.tilt(gx, gy));
                 view.requestRender();
                 return;
             }
-            if (e.values.length > 0) FoldWatch.hinge(e.values[0]);
         }
 
         @Override
@@ -270,6 +289,7 @@ public class SolcoWallpaperService extends WallpaperService {
             Prefs.of(SolcoWallpaperService.this).unregisterOnSharedPreferenceChangeListener(this);
             listen(false);
             if (sensors != null) sensors.unregisterListener(this);
+            FoldWatch.unlisten();
             if (view != null) {
                 view.destroy();
                 view = null;

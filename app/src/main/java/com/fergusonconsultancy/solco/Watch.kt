@@ -2,14 +2,14 @@ package com.fergusonconsultancy.solco
 
 import android.content.Context
 import android.os.PowerManager
-import android.os.SystemClock
+import com.cerniera.kit.Crash
+import com.cerniera.kit.Hinge
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -21,13 +21,18 @@ import kotlin.math.roundToInt
  */
 object FoldWatch {
     private var lastTall: Boolean? = null
-    private val times = LongArray(64)
-    private val angles = FloatArray(64)
-    private var count = 0
-    private var head = 0
+    /** One hinge for the whole process, from the Kit, heard while any wallpaper engine lives. */
+    private var hinge: Hinge? = null
+    private var users = 0
 
     /** True once the main screen was the last to arrive. */
     @JvmStatic val unfolded: Boolean get() = lastTall == false
+
+    /**
+     * Cover or main screen, from a surface's shape. The cover is long and narrow either way round
+     * (about 2.3 : 1), the main screen nearly square, so turning either screen never reads as a fold.
+     */
+    @JvmStatic fun tall(w: Int, h: Int) = maxOf(w, h) > minOf(w, h) * 1.5f
 
     /** Returns 1 for an opening, -1 for a closing, 0 when nothing folded. */
     @JvmStatic @Synchronized fun arrive(tall: Boolean): Int {
@@ -36,29 +41,30 @@ object FoldWatch {
         return if (prev == null || prev == tall) 0 else if (tall) -1 else 1
     }
 
-    @JvmStatic @Synchronized fun hinge(angle: Float) {
-        times[head] = SystemClock.elapsedRealtime(); angles[head] = angle
-        head = (head + 1) % times.size
-        if (count < times.size) count++
+    /**
+     * Starts hearing the hinge, for as long as a wallpaper engine lives: the screen goes dark before
+     * the hinge finishes moving, so a listener that ran only while visible never had a fold's
+     * readings. The sensor reports only when the hinge moves. Returns whether there is a hinge.
+     */
+    @JvmStatic @Synchronized fun listen(c: Context): Boolean {
+        users++
+        val h = hinge ?: Hinge(c.applicationContext, object : Hinge.Listener {}).also { hinge = it; it.start() }
+        return h.present
+    }
+
+    @JvmStatic @Synchronized fun unlisten() {
+        users = (users - 1).coerceAtLeast(0)
+        if (users == 0) { hinge?.stop(); hinge = null }
     }
 
     /**
-     * How fast the hinge swung just before the screens switched, in degrees a second, from the
-     * readings of the last 700 ms. A one-handed flick is well above 320 °/s, a deliberate fold
-     * well below. The threshold is an estimate, to be tuned on the Fold.
+     * Whether the hinge swung fast just before the screens switched, by the Kit's measure (degrees a
+     * second over the last 700 ms, fast above [Hinge.FAST]: still an estimate, to be tuned on the Fold).
      */
     @JvmStatic @Synchronized fun fast(c: Context): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        var firstT = 0L; var firstA = 0f; var lastT = 0L; var lastA = 0f; var seen = 0
-        for (j in 0 until count) {
-            val i = (head - count + j + times.size) % times.size
-            if (now - times[i] > 700) continue
-            if (seen == 0) { firstT = times[i]; firstA = angles[i] }
-            lastT = times[i]; lastA = angles[i]; seen++
-        }
-        if (seen < 2 || lastT <= firstT) { Diag.fold(c, -1, false); return false }
-        val speed = abs(lastA - firstA) / ((lastT - firstT) / 1000f)
-        val fast = speed > 320f
+        val speed = hinge?.takeIf { it.present }?.speed() ?: 0f
+        if (speed <= 0f) { Diag.fold(c, -1, false); return false }
+        val fast = speed > Hinge.FAST
         Diag.fold(c, speed.roundToInt(), fast)
         return fast
     }
@@ -147,34 +153,18 @@ object Diag {
 }
 
 /**
- * Failures, kept so they can be read on the phone. A crash anywhere in the app is written before
- * the process ends; a GPU failure is caught, written, and the wallpaper falls back to its ground.
+ * What the GPU did, for Diagnostics. A failure is also written as a crash report through the Kit,
+ * so Settings shows it on the next open with Share, Copy and Try again; the wallpaper falls back
+ * to its ground instead of ending.
  */
-object Crash {
+object Gpu {
+    /** The store keeps its old name, so diagnostics already on the phone carry over. */
     private const val NAME = "solco_crash"
     private fun store(c: Context) = c.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
     private fun stamp() = SimpleDateFormat("HH:mm:ss, d MMM", Locale.UK).format(Date())
 
-    fun install(c: Context) {
-        val app = c.applicationContext
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { t, e ->
-            runCatching { save(app, "Crash on ${t.name}", e) }
-            previous?.uncaughtException(t, e)
-        }
-    }
-
-    /** Written at once (commit, not apply), because the process may be about to end. */
-    @JvmStatic fun save(c: Context, where: String, e: Throwable) {
-        val trace = android.util.Log.getStackTraceString(e).lines().take(40).joinToString("\n")
-        val report = "Solco ${runCatching { c.packageManager.getPackageInfo(c.packageName, 0).versionName }.getOrNull()}\n" +
-            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}\n" +
-            "$where, ${stamp()}\n\n$trace"
-        store(c).edit().putString("report", report).commit()
-    }
-
-    fun report(c: Context): String? = store(c).getString("report", null)
-    fun clear(c: Context) { store(c).edit().remove("report").commit() }
+    /** A caught failure: kept as a report by the Kit's Crash, without ending the process. */
+    @JvmStatic fun failed(c: Context, where: String, e: Throwable) = runCatching { Crash.save(c, "Solco", where, e) }
 
     /** GPU facts and the first frame drawn on each screen, for Diagnostics. */
     fun gpu(c: Context, s: String) { store(c).edit().putString("gpu", s).apply() }
@@ -184,5 +174,4 @@ object Crash {
     }
     fun glError(c: Context, s: String) { store(c).edit().putString("gl_error", "$s, ${stamp()}").commit() }
     fun get(c: Context, key: String): String? = store(c).getString(key, null)
-    fun stampNow() = stamp()
 }

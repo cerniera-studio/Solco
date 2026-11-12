@@ -150,7 +150,7 @@ details[open] summary::after{content:"\2212"}
       <div class="note"><h4>Fanale</h4><p>Folded, a red ring hangs over a wet road like a moon, its bar of beads pointing at the hinge. Unfolded, its twin lights bead by bead and both bloom once: they were tail lamps all along. No badge, no serpent: the light carries the brand. Tap to lock and the lamps flash twice.</p></div>
       <div class="note"><h4>Goccia</h4><p>Folded, a drop forms on a leaf tip, swelling a touch past its shape and settling (water is soft). Unfolded, the hinge's magnetic settle jolts the leaf, the drop falls the length of the screen and splashes into the pond the door was hiding. That splash is the one climax. Fold again and a new drop forms. Touch the water for a ring.</p></div>
       <div class="note"><h4>Left out</h4><p>Pearls, sparkles and drifting motion at rest, because no force puts them there. A clock or date on the scenes, because the lock screen has one. Copies of the recordings' own scenes (the sandcastle, the golf dog, the lighthouse): the device's idea is taken, their pictures are not.</p></div>
-      <div class="note"><h4>Estimates</h4><p>Day and night follow approximate Leeds sunrise and sunset times by month. The hinge's speed cannot be read in a browser, so the Fast fold switch stands in for it. The green is an approximation of Visconti and should take the Kit's token when ported.</p></div>
+      <div class="note"><h4>Estimates</h4><p>Day and night follow approximate Leeds sunrise and sunset times by month. The hinge's speed cannot be read in a browser, so the Fast fold switch stands in for it. The leaf's green is the Kit's Visconti green (#1A3F31).</p></div>
     </div>
   </details>
 </div>
@@ -532,7 +532,7 @@ const Goccia={
     const P=base(e),d=e.day,T=e.T/1000/e.k,main=e.screen==='main',WY=this.WY;
     paintGround(ctx,P,e);
     let busy=main?T<3.4:T<1.6;
-    const fill=mix('#173A2C','#3F6447',d),rib=rgba(mix('#D9BB86','#E8E2CF',d),.42);
+    const fill=mix('#1A3F31','#3F6447',d),rib=rgba(mix('#D9BB86','#E8E2CF',d),.42);
     const bobOff=i=>{let o=0;for(const b of this.bobs){if(b.i!==i)continue;const a=(e.now-b.t)/1000;if(a<2.5){o+=30*sway(a,8,.45);busy=true}}return o};
     const dip=main?36*sway(T,9,.32):0;
     const offs=this.leaves.map((l,i)=>bobOff(i)+(l.main?dip:dip*.3));

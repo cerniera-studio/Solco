@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: actions/setup-java@v4
         with:
@@ -47,6 +49,8 @@ jobs:
           tag_name: build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           name: Solco build ${{ github.run_number }}
+          # Builds from a branch are kept as pre-releases (for their screenshots), so the latest release is always main's
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
           files: Solco.apk
 
   # Installs on a clean emulator, opens Settings and the wallpaper preview, touches the grain,
@@ -83,6 +87,7 @@ jobs:
           path: |
             shot-*.png
             app-log.txt
+            shapes.txt
 
       - name: Attach screenshots to the release
         if: always()
@@ -93,3 +98,4 @@ jobs:
           files: |
             shot-*.png
             app-log.txt
+            shapes.txt

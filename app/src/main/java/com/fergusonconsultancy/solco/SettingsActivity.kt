@@ -2,8 +2,6 @@ package com.fergusonconsultancy.solco
 
 import android.app.Activity
 import android.app.WallpaperManager
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.hardware.Sensor
@@ -11,13 +9,27 @@ import android.hardware.SensorManager
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.view.WindowInsets
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.cerniera.kit.Card
+import com.cerniera.kit.Crash
+import com.cerniera.kit.Fold
+import com.cerniera.kit.Kit
+import com.cerniera.kit.Row
+import com.cerniera.kit.Screen
+import com.cerniera.kit.Toggle
+import com.cerniera.kit.doctrineCard
+import com.cerniera.kit.endValue
+import com.cerniera.kit.eyebrow
+import com.cerniera.kit.primary
+import com.cerniera.kit.px
+import com.cerniera.kit.rounded
+import com.cerniera.kit.text
 
 /**
- * Solco's one screen. The wallpaper live at the top, choices as painted tiles, two switches, and
- * one main action. Options appear only where they apply; diagnostics fold away at the foot.
+ * Solco's one screen, on the Kit. The wallpaper live with its one main action, choices as painted
+ * tiles, two switches. Options appear only where they apply; diagnostics and the doctrine fold
+ * away at the foot. Laid out for every shape of the phone by [Stage].
  */
 class SettingsActivity : Activity() {
 
@@ -25,59 +37,38 @@ class SettingsActivity : Activity() {
     private val styleTiles = ArrayList<Pair<Style, PictureTile>>()
     private val finishTiles = ArrayList<Pair<Finish, PictureTile>>()
     private lateinit var styleNote: TextView
-    private lateinit var troncoCard: LinearLayout
+    private lateinit var troncoCard: View
     private lateinit var troncoCount: TextView
     private lateinit var lunaNote: TextView
     private lateinit var action: TextView
     private lateinit var diag: TextView
-    private lateinit var diagHead: TextView
-    private lateinit var crashCard: LinearLayout
-    private lateinit var crashText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val (scroll, col) = screen()
-        scroll.setOnApplyWindowInsetsListener { _, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars())
-            col.setPadding(px(20), px(28) + bars.top, px(20), px(40) + bars.bottom)
-            insets
-        }
+        // A crash from the last run is shown first, with Share, Copy and Try again
+        if (Crash.show(this, "Solco")) return
+        // Solco's settings stay in Visconti, whatever the phone's light: the wallpaper is its own light
+        Kit.dark = true
 
-        col.addView(label("Solco", 46f, Palette.IVORY, display = true))
-        col.addView(label("Grain and light that move only when something moves them.", 14.5f, Palette.MUTED).apply {
-            setPadding(0, px(8), 0, px(22))
+        val screen = Screen(this, "Solco", "Live wallpaper")
+        screen.add(text("Grain and light that move only when something moves them.", 14.5f, Kit.MUTED).apply {
+            setPadding(px(4), px(8), 0, px(14))
         })
+        val stage = Stage(this, screen)
 
-        // A failure, if one was recorded: said plainly, with its report one tap from being shared
-        crashText = label("", 13f, Palette.MUTED)
-        crashCard = card().apply {
-            setPadding(px(18), px(16), px(18), px(16))
-            addView(label("Solco hit a problem", 16f, Palette.IVORY, 500))
-            addView(crashText.apply { setPadding(0, px(6), 0, px(14)) })
-            addView(LinearLayout(this@SettingsActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                addView(button("Copy report") { copyReport() }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(button("Dismiss", primary = false) { Crash.clear(this@SettingsActivity); syncCrash() },
-                    LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = px(10) })
-            })
-        }
-        col.addView(crashCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(20) })
-
-        // The wallpaper, live, in this screen's own shape
+        // The wallpaper, live, in this screen's own shape (turned, if the screen is)
         val bounds = windowManager.currentWindowMetrics.bounds
         val aspect = bounds.height().toFloat() / bounds.width().coerceAtLeast(1)
-        preview = PreviewView(this, aspect)
-        col.addView(LinearLayout(this).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            addView(preview, LinearLayout.LayoutParams(-2, -2))
-        }, LinearLayout.LayoutParams(-1, -2))
-        col.addView(label("Touch the grain.", 12.5f, Palette.MUTED).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, px(12), 0, 0)
-        }, LinearLayout.LayoutParams(-1, -2))
+        preview = PreviewView(this, aspect, display?.rotation ?: 0)
+        stage.add(preview)
+        stage.add(text("Touch the grain.", 12.5f, Kit.MUTED).apply { gravity = Gravity.CENTER_HORIZONTAL }, px(12))
+        // The one main action, under the wallpaper it sets, so it is in reach in every shape
+        action = primary("Set as wallpaper") { setWallpaper() }
+        stage.add(action, px(16), fill = true)
+        val root = stage.build()
 
-        // Style: each one a different force
-        col.addView(eyebrow("Style"))
-        // Two rows of two: each style large enough to read its grain
+        // Style: each one a different force. Two rows of two, each large enough to read its grain
+        screen.section("Style")
         Style.values().toList().chunked(2).forEachIndexed { r, pair ->
             val styleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             pair.forEachIndexed { i, s ->
@@ -86,21 +77,20 @@ class SettingsActivity : Activity() {
                 styleTiles += s to t
                 styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
             }
-            col.addView(styleRow, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = px(14) })
+            screen.add(styleRow, if (r > 0) px(14) else 0)
         }
-        styleNote = label(Prefs.style(this).note, 13.5f, Palette.MUTED).apply { setPadding(px(2), px(14), 0, 0) }
-        col.addView(styleNote)
+        styleNote = text(Prefs.style(this).note, 13.5f, Kit.MUTED).apply { setPadding(px(2), px(14), 0, 0) }
+        screen.add(styleNote)
 
         // Tronco's record, only when Tronco is chosen
-        troncoCount = label("", 13f, Palette.CHAMPAGNE, 500)
-        troncoCard = card().apply {
-            addView(row("Rings so far", "One a day, from the day Solco was first set. Today's is still growing.", troncoCount))
+        troncoCount = endValue("", Kit.CHAMPAGNE)
+        troncoCard = Card(this).apply {
+            row(Row(this@SettingsActivity, "Rings so far", "One a day, from the day Solco was first set. Today's is still growing.", troncoCount))
         }
-        col.addView(troncoCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(16) })
+        screen.add(troncoCard, px(16))
 
-        // Finish
-        col.addView(eyebrow("Finish"))
-        // Two rows of three
+        // Finish: two rows of three
+        screen.section("Finish")
         Finish.values().toList().chunked(3).forEachIndexed { r, trio ->
             val finishRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             trio.forEachIndexed { i, f ->
@@ -109,84 +99,53 @@ class SettingsActivity : Activity() {
                 finishTiles += f to t
                 finishRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(10) })
             }
-            col.addView(finishRow, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = px(12) })
+            screen.add(finishRow, if (r > 0) px(12) else 0)
         }
 
         // Light and motion
-        col.addView(eyebrow("Light and motion"))
-        lunaNote = label("", 13f, Palette.MUTED)
-        col.addView(card().apply {
-            addView(row("True moon phase", "At night the disc shows tonight's moon instead of a full circle.",
+        screen.section("Light and motion")
+        lunaNote = text("", 13f, Kit.MUTED)
+        screen.add(Card(this).apply {
+            row(Row(this@SettingsActivity, "True moon phase", "At night the disc shows tonight's moon instead of a full circle.",
                 Toggle(this@SettingsActivity, Prefs.luna(this@SettingsActivity)) { Prefs.setLuna(this@SettingsActivity, it); repaintAll() }))
-            addView(View(this@SettingsActivity).apply { setBackgroundColor(Palette.HAIRLINE) }, LinearLayout.LayoutParams(-1, px(1)))
-            addView(row("Concentrato", "A fast fold leaves the bands emptier for a moment, then they fill back in.",
+            row(Row(this@SettingsActivity, "Concentrato", "A fast fold leaves the bands emptier for a moment, then they fill back in.",
                 Toggle(this@SettingsActivity, Prefs.concentrato(this@SettingsActivity)) { Prefs.setConcentrato(this@SettingsActivity, it) }))
         })
-        col.addView(lunaNote.apply { setPadding(px(4), px(10), 0, 0) })
-
-        // The one main action
-        action = button("Set as wallpaper") { setWallpaper() }
-        col.addView(action, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(30) })
+        screen.add(lunaNote.apply { setPadding(px(4), px(10), 0, 0) })
 
         // Sipario, the second wallpaper in this app
-        col.addView(eyebrow("Also here"))
-        col.addView(card().apply {
-            addView(row("Sipario", "Five scenes. Folded, a quiet one; unfold, and the rest of the story.",
-                label("Open", 14f, Palette.CHAMPAGNE, 500)))
-            setOnClickListener { startActivity(Intent(this@SettingsActivity, SiparioActivity::class.java)) }
+        screen.section("Also here")
+        screen.add(Card(this).apply {
+            row(Row(this@SettingsActivity, "Sipario", "Five scenes. Folded, a quiet one; unfold, and the rest of the story.",
+                endValue("Open", Kit.CHAMPAGNE)) { startActivity(Intent(this@SettingsActivity, SiparioActivity::class.java)) })
         })
 
-        // Diagnostics, folded away
-        val head = eyebrow("Diagnostics  +").apply { setTextColor(Palette.MUTED) }
-        diagHead = head
-        diag = label("", 12.5f, Palette.MUTED).apply { visibility = View.GONE; setPadding(px(4), 0, 0, 0) }
-        head.setOnClickListener {
-            diag.visibility = if (diag.visibility == View.GONE) View.VISIBLE else View.GONE
-            head.text = if (diag.visibility == View.GONE) "DIAGNOSTICS  +" else "DIAGNOSTICS  −"
-            fillDiag()
-        }
-        col.addView(head)
-        col.addView(diag)
+        // Diagnostics and the doctrine, folded away
+        diag = text("", 12.5f, Kit.MUTED)
+        screen.add(Fold(this, "Diagnostics", "What the wallpaper has seen on this phone").apply { body.addView(diag) }, px(30))
+        screen.add(doctrineCard(DOCTRINE_NOTES), px(12))
 
-        setContentView(scroll)
-        window.decorView.setBackgroundColor(Palette.GROUND)
+        setContentView(root)
+        window.decorView.setBackgroundColor(Kit.GROUND)
+        stage.record(root, preview, action)
         syncTronco()
     }
 
     override fun onResume() {
         super.onResume()
+        if (!::action.isInitialized) return
         val ours = runCatching { WallpaperManager.getInstance(this).wallpaperInfo?.packageName == packageName }.getOrDefault(false)
         action.text = if (ours) "Solco is your wallpaper" else "Set as wallpaper"
-        action.background = if (ours) rounded(Palette.RAISED, px(22).toFloat(), Palette.HAIRLINE, px(1)) else rounded(Palette.CHAMPAGNE, px(22).toFloat())
-        action.setTextColor(if (ours) Palette.IVORY else Palette.GROUND)
+        action.background = if (ours) rounded(0, px(28).toFloat(), Kit.HAIRLINE, px(1)) else rounded(Kit.CHAMPAGNE, px(28).toFloat())
+        action.setTextColor(if (ours) Kit.INK else Kit.GROUND)
         val sky = Sky.now()
         lunaNote.text = if (sky.day) "Tonight: ${Sky.phaseName(Sky.moonPhase(System.currentTimeMillis() + 12 * 3_600_000L))}."
         else "Now: ${Sky.phaseName(sky.phase)}."
         syncTronco()
         fillDiag()
-        syncCrash()
     }
 
     private val version by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?" }
-
-    private fun syncCrash() {
-        // A report from an earlier build describes a fault that build may already have fixed
-        Crash.report(this)?.let { if (!it.startsWith("Solco $version\n")) Crash.clear(this) }
-        val r = Crash.report(this)
-        crashCard.visibility = if (r == null) View.GONE else View.VISIBLE
-        if (r != null) {
-            crashText.text = r.lines().getOrNull(2)?.let { "$it. Copy the report and send it over, then try again." } ?: "Copy the report and send it over."
-            // Diagnostics open themselves when something went wrong
-            diag.visibility = View.VISIBLE
-            diagHead.text = "DIAGNOSTICS  \u2212"
-            fillDiag()
-        }
-    }
-
-    private fun copyReport() {
-        val text = (Crash.report(this) ?: "") + "\n\n" + diag.text
-        getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Solco report", text))
-    }
 
     private fun pickStyle(s: Style) {
         if (Prefs.style(this) == s) return
@@ -229,10 +188,10 @@ class SettingsActivity : Activity() {
             "Main screen: " + (p.getString("seen_main", null) ?: "not drawn yet"),
             "Hinge sensor: " + if (hinge) "present" else "absent",
             "Last fold: " + (p.getString("last_fold", null) ?: "none yet"),
-            "Drawn on the cover: " + (Crash.get(this, "drew_cover") ?: "never"),
-            "Drawn on the main screen: " + (Crash.get(this, "drew_main") ?: "never"),
-            "GPU: " + (Crash.get(this, "gpu") ?: "not seen yet"),
-            "GPU problem: " + (Crash.get(this, "gl_error") ?: "none"),
+            "Drawn on the cover: " + (Gpu.get(this, "drew_cover") ?: "never"),
+            "Drawn on the main screen: " + (Gpu.get(this, "drew_main") ?: "never"),
+            "GPU: " + (Gpu.get(this, "gpu") ?: "not seen yet"),
+            "GPU problem: " + (Gpu.get(this, "gl_error") ?: "none"),
             "Tronco record began: " + Growth.start(this),
             "Version: $version",
         ).joinToString("\n")
@@ -245,5 +204,15 @@ class SettingsActivity : Activity() {
         } catch (e: Exception) {
             runCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
         }
+    }
+
+    companion object {
+        /** How Solco answers each principle, under the doctrine at the foot of Settings. */
+        val DOCTRINE_NOTES = listOf(
+            "The monolithic membrane" to "The grain is one body: a finger pushes the grain under it, and the grain around it yields and follows, then everything springs home.",
+            "Concentrato" to "A fast fold leaves the bands emptier for a moment, so only the swing's trajectory reads; they fill back in as the grain settles.",
+            "Giulietta" to "Nothing on the wallpaper is a control. The sun or moon, the battery's tide and the day's ring are read from the grain itself.",
+            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery or a tilt moves something.",
+        )
     }
 }
