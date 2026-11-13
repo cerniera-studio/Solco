@@ -13,9 +13,15 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.view.WindowInsets
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.cerniera.kit.Card
 import com.cerniera.kit.Kit
+import com.cerniera.kit.Row
+import com.cerniera.kit.Segmented
+import com.cerniera.kit.Toggle
+import com.cerniera.kit.primary
 import com.cerniera.kit.Screen
 import com.cerniera.kit.px
 import com.cerniera.kit.text
@@ -74,6 +80,12 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
 
     fun stir(dir: Int) {
         scene?.stir(dir, false, false, SystemClock.uptimeMillis())
+        invalidate()
+    }
+
+    /** Plays a fast fold with Concentrato as chosen, so it can be seen without flicking the phone. */
+    fun flick() {
+        scene?.stir(1, true, true, SystemClock.uptimeMillis(), Prefs.depth(context).grain, Prefs.linger(context).decay)
         invalidate()
     }
 
@@ -224,4 +236,45 @@ class Stage(private val a: Activity, val screen: Screen) {
             }
         })
     }
+}
+
+/**
+ * Concentrato and its choices (13 Nov 2026), the same card in Solco's and Sipario's settings: the
+ * switch, then, only while it is on (Giulietta), what counts as fast, how empty, how long it
+ * lingers, and Show me, which plays a fast fold on the live wallpaper above.
+ */
+fun Activity.concentratoCard(note: String, show: () -> Unit): View {
+    val a = this
+    val card = Card(a)
+    val more = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; visibility = if (Prefs.concentrato(a)) View.VISIBLE else View.GONE }
+    card.row(Row(a, "Concentrato", note, Toggle(a, Prefs.concentrato(a)) { on ->
+        Prefs.setConcentrato(a, on)
+        (card.parent as? android.view.ViewGroup)?.let { android.transition.TransitionManager.beginDelayedTransition(it) }
+        more.visibility = if (on) View.VISIBLE else View.GONE
+    }))
+    fun hairline() = more.addView(View(a).apply { setBackgroundColor(Kit.HAIRLINE) },
+        LinearLayout.LayoutParams(-1, a.px(1)).apply { marginStart = a.px(18); marginEnd = a.px(18) })
+    fun choice(title: String, sub: String, options: List<String>, selected: Int, picked: (Int) -> Unit) {
+        hairline()
+        more.addView(LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(a.px(18), a.px(14), a.px(18), a.px(16))
+            addView(a.text(title, 16f, Kit.INK, 450))
+            addView(a.text(sub, 13f, Kit.MUTED).apply { tag = com.cerniera.kit.SECONDARY }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = a.px(3) })
+            addView(Segmented(a, options, selected, picked), LinearLayout.LayoutParams(-1, -2).apply { topMargin = a.px(12) })
+        })
+    }
+    choice("What counts as fast", "Your hinge reads a swing in two steps: brisk folds, or only the quickest flicks.",
+        Trigger.values().map { it.title }, Prefs.trigger(a).ordinal) { Prefs.setTrigger(a, Trigger.values()[it]) }
+    choice("How empty", "How much of the grain falls away. In Sipario, how much of the ornament.",
+        Depth.values().map { it.title }, Prefs.depth(a).ordinal) { Prefs.setDepth(a, Depth.values()[it]) }
+    choice("How long it lingers", "How slowly Solco's grain fills back in.",
+        Linger.values().map { it.title }, Prefs.linger(a).ordinal) { Prefs.setLinger(a, Linger.values()[it]) }
+    hairline()
+    more.addView(FrameLayout(a).apply {
+        setPadding(a.px(18), a.px(14), a.px(18), a.px(18))
+        addView(a.primary("Show me", filled = false) { show() }, FrameLayout.LayoutParams(-1, -2))
+    })
+    card.addView(more, LinearLayout.LayoutParams(-1, -2))
+    return card
 }

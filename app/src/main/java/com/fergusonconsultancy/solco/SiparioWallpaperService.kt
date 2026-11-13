@@ -41,6 +41,8 @@ class SiparioWallpaperService : WallpaperService() {
         private val env = Env()
         private var arrivedAt = 0L
         private var fast = false
+        /** The ornament kept after a fast fold, as chosen under Concentrato. */
+        private var orn = .25f
         private var listening = false
         private var failed = false
         private var reported = false
@@ -84,6 +86,7 @@ class SiparioWallpaperService : WallpaperService() {
             if (prev != null && prev != tall) {
                 val c = this@SiparioWallpaperService
                 fast = Prefs.concentrato(c) && FoldWatch.fast(c)
+                orn = Prefs.depth(c).ornament
                 arrivedAt = SystemClock.uptimeMillis()
                 scene.arrive(!tall, arrivedAt)
             }
@@ -167,7 +170,7 @@ class SiparioWallpaperService : WallpaperService() {
                 env.now = now
                 env.t = (now - arrivedAt) / 1000f
                 env.k = if (fast) .65f else 1f
-                env.orn = if (fast) .25f else 1f
+                env.orn = if (fast) orn else 1f
                 busy = World.draw(c, w, h, scene, env)
                 if (!reported) { reported = true; SipDiag.drew(this@SiparioWallpaperService, tall, "${w}x$h, ${act.title}") }
             } catch (t: Throwable) {

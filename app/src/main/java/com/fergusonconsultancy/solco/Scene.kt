@@ -247,7 +247,10 @@ class Scene(
      * The fold: a tangential push along the swing, outer grain first and furthest. [dir] is 1 for
      * opening, -1 for closing. A fast fold with Concentrato on empties the bands for a moment.
      */
-    fun stir(dir: Int, fast: Boolean, concentrato: Boolean, now: Long) {
+    /** Concentrato's fill-back: the share of the emptiness left after each frame at rest. */
+    private var decay = .95f
+
+    fun stir(dir: Int, fast: Boolean, concentrato: Boolean, now: Long, depth: Float = .75f, linger: Float = .95f) {
         val k0 = (if (fast) 7.5f else 4.2f) * dp * dir
         val spread = if (fast) 260f else 520f
         for (i in 0 until n) {
@@ -255,7 +258,8 @@ class Scene(
             kick[i] = k0 * (.35f + .65f * t) * (.85f + .3f * hash[i])
             kickAt[i] = now + ((1f - t) * spread).toLong()
         }
-        empty = if (fast && concentrato) .75f else 0f
+        empty = if (fast && concentrato) depth else 0f
+        decay = linger
     }
 
     /** A finger: grain yields under it and is dragged a little with it; neighbours follow. */
@@ -327,7 +331,7 @@ class Scene(
             if (e > energy) energy = e
         }
         if (empty > 0f) {
-            if (energy < 1.2f * dp) empty *= .95f.pow(dt)
+            if (energy < 1.2f * dp) empty *= decay.pow(dt)
             if (empty < .01f) empty = 0f
         }
         // Marea on charge: the grain near the surface rises and falls on a slow swell

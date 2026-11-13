@@ -102,7 +102,8 @@ object FoldWatch {
             "; $readings readings since listening began ${ago(startedAt)} (start $starts)" + if (hinge == null) " (no hinge listener)" else "")
         swingAt = 0L
         if (speed <= 0f) { Diag.fold(c, -1, false); return false }
-        val fast = speed > Hinge.FAST
+        // Brisk or only a flick, as chosen under Concentrato
+        val fast = speed > Prefs.trigger(c).above
         Diag.fold(c, speed.roundToInt(), fast)
         return fast
     }

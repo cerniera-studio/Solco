@@ -108,10 +108,10 @@ class SettingsActivity : Activity() {
         screen.add(Card(this).apply {
             row(Row(this@SettingsActivity, "True moon phase", "At night the disc shows tonight's moon instead of a full circle.",
                 Toggle(this@SettingsActivity, Prefs.luna(this@SettingsActivity)) { Prefs.setLuna(this@SettingsActivity, it); repaintAll() }))
-            row(Row(this@SettingsActivity, "Concentrato", "A fast fold leaves the bands emptier for a moment, then they fill back in.",
-                Toggle(this@SettingsActivity, Prefs.concentrato(this@SettingsActivity)) { Prefs.setConcentrato(this@SettingsActivity, it) }))
         })
         screen.add(lunaNote.apply { setPadding(px(4), px(10), 0, 0) })
+        // Concentrato and its choices; Show me plays a fast fold on the wallpaper above
+        screen.add(concentratoCard("A fast fold leaves the bands emptier for a moment, then they fill back in.") { showFlick() }, px(16))
 
         // Sipario, the second wallpaper in this app
         screen.section("Also here")
@@ -146,6 +146,15 @@ class SettingsActivity : Activity() {
     }
 
     private val version by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?" }
+
+    /** Plays a fast fold on the live wallpaper, scrolling it into view first when the page has moved past it. */
+    private fun showFlick() {
+        var v: View = preview
+        var top = 0
+        while (v.parent is View && v.parent !is android.widget.ScrollView) { top += v.top; v = v.parent as View }
+        (v.parent as? android.widget.ScrollView)?.let { sv -> if (sv.scrollY > top) { sv.smoothScrollTo(0, (top - px(24)).coerceAtLeast(0)); preview.postDelayed({ preview.flick() }, 380); return } }
+        preview.flick()
+    }
 
     private fun pickStyle(s: Style) {
         if (Prefs.style(this) == s) return
