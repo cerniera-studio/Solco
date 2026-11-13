@@ -188,6 +188,7 @@ class SettingsActivity : Activity() {
             "Main screen: " + (p.getString("seen_main", null) ?: "not drawn yet"),
             "Hinge sensor: " + if (hinge) "present" else "absent",
             "Last fold: " + (p.getString("last_fold", null) ?: "none yet"),
+            "Fold log (newest first):\n" + (p.getString("fold_log", null) ?: "nothing yet"),
             "Drawn on the cover: " + (Gpu.get(this, "drew_cover") ?: "never"),
             "Drawn on the main screen: " + (Gpu.get(this, "drew_main") ?: "never"),
             "GPU: " + (Gpu.get(this, "gpu") ?: "not seen yet"),
