@@ -34,7 +34,8 @@ adb shell input keyevent KEYCODE_HOME; adb shell am force-stop com.android.wallp
 adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
 SZ=$(adb shell wm size | grep -o "[0-9]*x[0-9]*" | tail -1); SW=${SZ%x*}; SH=${SZ#*x}
 for t in Half Longer "Show me"; do
-  xy=""; for i in 1 2 3 4 5 6 7 8 9 10; do xy=$(find_text "$t"); [ -n "$xy" ] && break; adb shell input swipe $((SW/2)) $((SH*3/4)) $((SW/2)) $((SH/3)) 300; sleep 1; done
+  # Swiped in the margin: the live wallpaper keeps a finger that lands on it, so the page wouldn't scroll
+  xy=""; for i in 1 2 3 4 5 6 7 8 9 10; do xy=$(find_text "$t"); [ -n "$xy" ] && break; adb shell input swipe 8 $((SH*3/4)) 8 $((SH/3)) 300; sleep 1; done
   if [ -n "$xy" ]; then adb shell input tap $xy; echo "::notice::tapped '$t' at $xy"; sleep 1; else echo "::error::no '$t' in Solco's settings" | tee -a shapes.txt; fi
 done
 sleep 0.2

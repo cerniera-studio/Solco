@@ -16,6 +16,7 @@ adb shell settings put system accelerometer_rotation 0
 shape() {  # WxH (upright) dpi rotation
   adb shell wm density "$2"; adb shell wm size "$1"
   adb shell settings put system user_rotation "$3"
+  adb shell wm user-rotation lock "$3" >/dev/null 2>&1
   sleep 3
 }
 
@@ -68,7 +69,8 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
     want=$([ "$4" = 0 ] && echo 0 || echo 1)
     [ "$wide" = "$want" ] && break
     echo "rotation not applied (try $try), asking again"
-    adb shell settings put system user_rotation 0; sleep 1; adb shell settings put system user_rotation "$4"; sleep 3
+    adb shell settings put system user_rotation 0; adb shell wm user-rotation lock 0 >/dev/null 2>&1; sleep 1
+    adb shell settings put system user_rotation "$4"; adb shell wm user-rotation lock "$4" >/dev/null 2>&1; sleep 3
     adb shell run-as $PKG rm -f files/layout.json
     adb shell am force-stop $PKG; adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
   done
@@ -97,7 +99,7 @@ prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">VISCONTI</st
 shape 823x1920 320 0
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
 sleep 9
-for r in 1 0 3 0; do adb shell settings put system user_rotation $r; sleep 4; done
+for r in 1 0 3 0; do adb shell settings put system user_rotation $r; adb shell wm user-rotation lock $r >/dev/null 2>&1; sleep 4; done
 adb exec-out screencap -p > shot-shape-cover-turned-back.png
 fold=$(adb shell run-as $PKG cat shared_prefs/solco.xml 2>/dev/null | grep -o 'name="last_fold">[^<]*')
 if [ -n "$fold" ]; then echo "::error::turning the cover counted as a fold: $fold"; else echo "::notice::turning the cover both ways: no fold logged"; fi | tee -a shapes.txt
@@ -107,6 +109,6 @@ fold=$(adb shell run-as $PKG cat shared_prefs/solco.xml 2>/dev/null | grep -o 'n
 if [ -n "$fold" ]; then echo "::notice::an unfold still counts: $fold"; else echo "::error::unfolding no longer counts as a fold"; fi | tee -a shapes.txt
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
-adb shell settings put system user_rotation 0
+adb shell settings put system user_rotation 0; adb shell wm user-rotation lock 0 >/dev/null 2>&1
 adb shell wm size reset; adb shell wm density reset
 sleep 3
