@@ -29,6 +29,9 @@ for m in re.finditer(r'<node [^>]*?text="([^"]*)"[^>]*?bounds="\[(\d+),(\d+)\]\[
         a,b,c,d=map(int,m.groups()[1:]); print((a+c)//2,(b+d)//2); break
 PY
 }
+# Settings in front on its own: the shape checks can leave the system's wallpaper picker open
+adb shell input keyevent KEYCODE_HOME; adb shell am force-stop com.android.wallpaper.livepicker
+adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
 SZ=$(adb shell wm size | grep -o "[0-9]*x[0-9]*" | tail -1); SW=${SZ%x*}; SH=${SZ#*x}
 for t in Half Longer "Show me"; do
   xy=""; for i in 1 2 3 4 5 6 7 8 9 10; do xy=$(find_text "$t"); [ -n "$xy" ] && break; adb shell input swipe $((SW/2)) $((SH*3/4)) $((SW/2)) $((SH/3)) 300; sleep 1; done
