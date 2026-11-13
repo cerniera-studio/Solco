@@ -220,7 +220,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (dirtySky) paintSky()
         val now = SystemClock.uptimeMillis()
         if (pendingStir != 0) {
-            s.stir(pendingStir, pendingFast, Prefs.concentrato(ctx), now)
+            s.stir(pendingStir, pendingFast, Prefs.concentrato(ctx), now, Prefs.depth(ctx).grain, Prefs.linger(ctx).decay)
             pendingStir = 0
         }
         val moving = s.step(now)

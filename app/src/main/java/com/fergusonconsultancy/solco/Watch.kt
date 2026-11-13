@@ -48,7 +48,13 @@ object FoldWatch {
      */
     @JvmStatic @Synchronized fun listen(c: Context): Boolean {
         users++
-        val h = hinge ?: Hinge(c.applicationContext, object : Hinge.Listener {}).also { hinge = it; it.start() }
+        val h = hinge ?: Hinge(c.applicationContext, object : Hinge.Listener {
+            override fun onAngle(angle: Float) { heard(angle) }
+            // The swing is timed the moment the hinge reaches open or closed, while its readings are
+            // fresh. The wallpaper may only see the new screen seconds later (folding with an app open,
+            // or before unlocking), by when the last 700 ms hold no movement at all.
+            override fun onFold(opened: Boolean, fast: Boolean) { swing(hinge?.speed() ?: 0f) }
+        }).also { hinge = it; it.start(); startedAt = now(); readings = 0; starts++ }
         return h.present
     }
 
@@ -57,14 +63,47 @@ object FoldWatch {
         if (users == 0) { hinge?.stop(); hinge = null }
     }
 
+    // What the hinge has told this process, for the fold log in Diagnostics (13 Nov 2026: folds on the
+    // Fold logged "no hinge readings" with the timing fix in place, so the log shows what arrives)
+    private fun now() = android.os.SystemClock.elapsedRealtime()
+    /** How many times the hinge listener has started in this process: more than 1 means engines came and went. */
+    private var starts = 0
+    private var startedAt = 0L
+    private var readings = 0
+    private var lastAngle = Float.NaN
+    private var lastAngleAt = 0L
+
+    @Synchronized private fun heard(angle: Float) {
+        readings++; lastAngle = angle; lastAngleAt = now()
+    }
+
+    /** The last complete swing: its speed and when it ended. */
+    private var swingSpeed = 0f
+    private var swingAt = 0L
+
+    @Synchronized private fun swing(speed: Float) {
+        if (speed <= 0f) return
+        swingSpeed = speed; swingAt = android.os.SystemClock.elapsedRealtime()
+    }
+
     /**
      * Whether the hinge swung fast just before the screens switched, by the Kit's measure (degrees a
-     * second over the last 700 ms, fast above [Hinge.FAST]: still an estimate, to be tuned on the Fold).
+     * second over 700 ms, fast above [Hinge.FAST]: still an estimate, to be tuned on the Fold).
+     * A screen that arrives mid-swing reads the hinge as it moves; one that arrives later (an app was
+     * open, or the phone was locked) takes the swing that finished within the last 15 s.
      */
     @JvmStatic @Synchronized fun fast(c: Context): Boolean {
-        val speed = hinge?.takeIf { it.present }?.speed() ?: 0f
+        val live = hinge?.takeIf { it.present }?.speed() ?: 0f
+        val recent = swingAt > 0L && android.os.SystemClock.elapsedRealtime() - swingAt < 15_000L
+        val speed = if (live > 0f) live else if (recent) swingSpeed else 0f
+        val ago = { t: Long -> if (t == 0L) "never" else "%.1f s ago".format((now() - t) / 1000f) }
+        Diag.log(c, "live ${live.roundToInt()} °/s; swing " + (if (swingAt > 0L) "${swingSpeed.roundToInt()} °/s ${ago(swingAt)}" else "none") +
+            "; last reading " + (if (lastAngle.isNaN()) "none" else "${lastAngle.roundToInt()}° ${ago(lastAngleAt)}") +
+            "; $readings readings since listening began ${ago(startedAt)} (start $starts)" + if (hinge == null) " (no hinge listener)" else "")
+        swingAt = 0L
         if (speed <= 0f) { Diag.fold(c, -1, false); return false }
-        val fast = speed > Hinge.FAST
+        // Brisk or only a flick, as chosen under Concentrato
+        val fast = speed > Prefs.trigger(c).above
         Diag.fold(c, speed.roundToInt(), fast)
         return fast
     }
@@ -144,6 +183,13 @@ object Diag {
 
     @JvmStatic fun hinge(c: Context, present: Boolean) {
         Prefs.of(c).edit().putBoolean("hinge_sensor", present).apply()
+    }
+
+    /** The last three fold arrivals, newest first: what the hinge had reported at that moment. */
+    fun log(c: Context, line: String) {
+        val p = Prefs.of(c)
+        val old = (p.getString("fold_log", null) ?: "").split("\n").filter { it.isNotBlank() }.take(2)
+        p.edit().putString("fold_log", (listOf("${stamp()}: $line") + old).joinToString("\n")).apply()
     }
 
     fun fold(c: Context, speed: Int, fast: Boolean) {

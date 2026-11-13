@@ -90,10 +90,7 @@ class SiparioActivity : Activity() {
         })
 
         screen.section("Motion")
-        screen.add(Card(this).apply {
-            row(Row(this@SiparioActivity, "Concentrato", "A fast fold plays the arrival a third quicker, with a quarter of the ornament. Shared with Solco.",
-                Toggle(this@SiparioActivity, Prefs.concentrato(this@SiparioActivity)) { Prefs.setConcentrato(this@SiparioActivity, it) }))
-        })
+        screen.add(concentratoCard("A fast fold plays the arrival a third quicker, with less of the ornament. Shared with Solco.") { showFlick() })
 
         diag = text("", 12.5f, Kit.MUTED)
         screen.add(Fold(this, "Diagnostics", "What the wallpaper has seen on this phone").apply { body.addView(diag) }, px(30))
@@ -114,6 +111,16 @@ class SiparioActivity : Activity() {
         action.background = if (ours) rounded(0, px(28).toFloat(), Kit.HAIRLINE, px(1)) else rounded(Kit.CHAMPAGNE, px(28).toFloat())
         action.setTextColor(if (ours) Kit.INK else Kit.GROUND)
         fillDiag()
+    }
+
+    /** Plays the other screen's arrival as a fast fold would, scrolling the scene into view first if needed. */
+    private fun showFlick() {
+        var v: View = preview
+        var top = 0
+        while (v.parent is View && v.parent !is android.widget.ScrollView) { top += v.top; v = v.parent as View }
+        val go = { preview.play(!preview.main, fast = true); play.text = if (preview.main) "Play the fold" else "Play the unfold" }
+        (v.parent as? android.widget.ScrollView)?.let { sv -> if (sv.scrollY > top) { sv.smoothScrollTo(0, (top - px(24)).coerceAtLeast(0)); preview.postDelayed({ go() }, 380); return } }
+        go()
     }
 
     private fun flip() {
@@ -201,7 +208,11 @@ class SiparioView(c: Context, var main: Boolean, private val here: Float = 0f) :
         setMeasuredDimension((hh / aspect).toInt(), hh.toInt())
     }
 
-    fun play(toMain: Boolean) {
+    /** After a fast fold with Concentrato: the arrival a third quicker, with the chosen share of the ornament. */
+    private var fast = false
+
+    fun play(toMain: Boolean, fast: Boolean = false) {
+        this.fast = fast
         main = toMain
         requestLayout()
         arrivedAt = SystemClock.uptimeMillis()
@@ -210,6 +221,7 @@ class SiparioView(c: Context, var main: Boolean, private val here: Float = 0f) :
     }
 
     fun show(a: Act) {
+        fast = false
         scene = a.make()
         arrivedAt = SystemClock.uptimeMillis()
         scene.arrive(main, arrivedAt)
@@ -219,7 +231,7 @@ class SiparioView(c: Context, var main: Boolean, private val here: Float = 0f) :
     override fun onDraw(canvas: Canvas) {
         if (width <= 0 || height <= 0) return
         val now = SystemClock.uptimeMillis()
-        env.refreshSky(); env.main = main; env.now = now; env.t = (now - arrivedAt) / 1000f; env.k = 1f; env.orn = 1f
+        env.refreshSky(); env.main = main; env.now = now; env.t = (now - arrivedAt) / 1000f; env.k = if (fast) .65f else 1f; env.orn = if (fast) Prefs.depth(context).ornament else 1f
         if (World.draw(canvas, width, height, scene, env)) postInvalidateOnAnimation()
     }
 

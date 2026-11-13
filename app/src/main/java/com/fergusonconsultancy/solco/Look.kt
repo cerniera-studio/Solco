@@ -39,6 +39,29 @@ enum class Style(val title: String, val note: String) {
     DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain slides downhill; level the phone and the wind blows it home."),
 }
 
+/**
+ * Concentrato's three choices (13 Nov 2026), shown under its switch while it is on.
+ * The Fold's hinge reads a swing in two steps (about 225 °/s or about 450 °/s, 13 Nov), so "fast"
+ * is offered as two choices rather than a slider that would pretend to finer readings.
+ */
+enum class Trigger(val title: String, val above: Float) {
+    BRISK("Brisk", 180f),
+    FLICK("Only a flick", com.cerniera.kit.Hinge.FAST),
+}
+
+/** How much falls away: Solco's share of the grain, and the share of Sipario's ornament that stays. */
+enum class Depth(val title: String, val grain: Float, val ornament: Float) {
+    TOUCH("A touch", .35f, .75f),
+    HALF("Half", .55f, .5f),
+    MOST("Most", .75f, .25f),
+}
+
+/** How slowly Solco's grain fills back in: the share of the emptiness left after each frame at rest. */
+enum class Linger(val title: String, val decay: Float) {
+    BREATH("A breath", .95f),
+    LONGER("Longer", .98f),
+}
+
 object Prefs {
     private const val NAME = "solco"
     /** The keys that change how the wallpaper looks. Anything else (growth, diagnostics) must not redraw it. */
@@ -54,6 +77,12 @@ object Prefs {
     }
     fun luna(c: Context) = of(c).getBoolean("luna", true)
     fun concentrato(c: Context) = of(c).getBoolean("concentrato", true)
+    @JvmStatic fun trigger(c: Context) = runCatching { Trigger.valueOf(of(c).getString("conc_trigger", null) ?: "FLICK") }.getOrDefault(Trigger.FLICK)
+    @JvmStatic fun depth(c: Context) = runCatching { Depth.valueOf(of(c).getString("conc_depth", null) ?: "MOST") }.getOrDefault(Depth.MOST)
+    @JvmStatic fun linger(c: Context) = runCatching { Linger.valueOf(of(c).getString("conc_linger", null) ?: "BREATH") }.getOrDefault(Linger.BREATH)
+    fun setTrigger(c: Context, v: Trigger) = of(c).edit().putString("conc_trigger", v.name).apply()
+    fun setDepth(c: Context, v: Depth) = of(c).edit().putString("conc_depth", v.name).apply()
+    fun setLinger(c: Context, v: Linger) = of(c).edit().putString("conc_linger", v.name).apply()
 
     fun setStyle(c: Context, s: Style) = of(c).edit().putString("style", s.name).apply()
     fun setFinish(c: Context, f: Finish) = of(c).edit().putString("finish", f.name).apply()

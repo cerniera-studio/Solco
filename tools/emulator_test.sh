@@ -18,6 +18,32 @@ adb shell input swipe 300 600 700 900 500
 sleep 0.3
 adb exec-out screencap -p > shot-settings-touch.png
 
+# Concentrato's choices (13 Nov 2026): scroll to them, pick Half and Longer, then Show me on the live wallpaper
+find_text() {  # prints "x y" of the first node whose text is $1
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1
+  python3 - "$1" <<'PY'
+import re,sys
+x=open('ui.xml',encoding='utf-8').read()
+for m in re.finditer(r'<node [^>]*?text="([^"]*)"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x):
+    if m.group(1)==sys.argv[1]:
+        a,b,c,d=map(int,m.groups()[1:]); print((a+c)//2,(b+d)//2); break
+PY
+}
+# Settings in front on its own: the shape checks can leave the system's wallpaper picker open
+adb shell input keyevent KEYCODE_HOME; adb shell am force-stop com.android.wallpaper.livepicker
+adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
+SZ=$(adb shell wm size | grep -o "[0-9]*x[0-9]*" | tail -1); SW=${SZ%x*}; SH=${SZ#*x}
+for t in Half Longer "Show me"; do
+  # Swiped in the margin: the live wallpaper keeps a finger that lands on it, so the page wouldn't scroll
+  xy=""; for i in 1 2 3 4 5 6 7 8 9 10; do xy=$(find_text "$t"); [ -n "$xy" ] && break; adb shell input swipe 8 $((SH*3/4)) 8 $((SH/3)) 300; sleep 1; done
+  if [ -n "$xy" ]; then adb shell input tap $xy; echo "::notice::tapped '$t' at $xy"; sleep 1; else echo "::error::no '$t' in Solco's settings" | tee -a shapes.txt; fi
+done
+sleep 0.2
+adb exec-out screencap -p > shot-concentrato-show-me.png
+sleep 4
+adb exec-out screencap -p > shot-concentrato-after.png
+adb shell run-as $PKG cat shared_prefs/solco.xml | grep -o 'conc_[a-z]*">[A-Z]*' | tr '\n' ' '; echo
+
 # The system's live wallpaper preview: what the home screen will show
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
 sleep 15
