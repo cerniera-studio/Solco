@@ -8,5 +8,6 @@ class SolcoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Crash.install(this, "Solco")
+        Sky.load(this)
     }
 }
