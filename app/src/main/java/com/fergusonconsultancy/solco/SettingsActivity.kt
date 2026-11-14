@@ -37,6 +37,8 @@ class SettingsActivity : Activity() {
     private val styleTiles = ArrayList<Pair<Style, PictureTile>>()
     private val finishTiles = ArrayList<Pair<Finish, PictureTile>>()
     private lateinit var styleNote: TextView
+    private lateinit var placeRow: Row
+    private lateinit var placeValue: TextView
     private lateinit var troncoCard: View
     private lateinit var troncoCount: TextView
     private lateinit var lunaNote: TextView
@@ -110,6 +112,10 @@ class SettingsActivity : Activity() {
                 Toggle(this@SettingsActivity, Prefs.luna(this@SettingsActivity)) { Prefs.setLuna(this@SettingsActivity, it); repaintAll() }))
         })
         screen.add(lunaNote.apply { setPadding(px(4), px(10), 0, 0) })
+        // Where the sun and moon are read for: the phone's place, or Leeds until location is allowed
+        placeValue = endValue("", Kit.CHAMPAGNE)
+        placeRow = Row(this, "Sky over", "", placeValue) { askPlace() }
+        screen.add(Card(this).apply { row(placeRow) }, px(16))
         // Concentrato and its choices; Show me plays a fast fold on the wallpaper above
         screen.add(concentratoCard("A fast fold leaves the bands emptier for a moment, then they fill back in.") { showFlick() }, px(16))
 
@@ -141,8 +147,35 @@ class SettingsActivity : Activity() {
         val sky = Sky.now()
         lunaNote.text = if (sky.day) "Tonight: ${Sky.phaseName(Sky.moonPhase(System.currentTimeMillis() + 12 * 3_600_000L))}."
         else "Now: ${Sky.phaseName(sky.phase)}."
+        showPlace()
+        if (Sky.hasLocation(this)) Sky.follow(this) { moved -> showPlace(); if (moved) repaintAll() }
         syncTronco()
         fillDiag()
+    }
+
+    private fun showPlace() {
+        val d = Sky.day()
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+        fun t(i: java.time.Instant?) = i?.atZone(java.time.ZoneId.systemDefault())?.format(fmt) ?: "none"
+        val today = "Sunrise ${t(d.sunrise)}, sunset ${t(d.sunset)} today."
+        if (Sky.hasLocation(this)) {
+            placeValue.text = Sky.place.name
+            placeRow.setSub(if (Sky.placeAt == 0L) "Finding where you are. $today" else "From your location. $today")
+        } else {
+            placeValue.text = "Use my location"
+            placeRow.setSub("Leeds until location is allowed. $today")
+        }
+    }
+
+    private fun askPlace() {
+        if (Sky.hasLocation(this)) { Sky.follow(this) { moved -> showPlace(); if (moved) repaintAll() }; return }
+        requestPermissions(arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION), REQ_PLACE)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_PLACE) { showPlace(); Sky.follow(this) { moved -> showPlace(); if (moved) repaintAll() } }
     }
 
     private val version by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?" }
@@ -217,6 +250,7 @@ class SettingsActivity : Activity() {
     }
 
     companion object {
+        private const val REQ_PLACE = 7
         /** How Solco answers each principle, under the doctrine at the foot of Settings. */
         val DOCTRINE_NOTES = listOf(
             "The monolithic membrane" to "The grain is one body: a finger pushes the grain under it, and the grain around it yields and follows, then everything springs home.",

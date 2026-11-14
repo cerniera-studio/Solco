@@ -4,6 +4,9 @@
     <uses-feature android:name="android.software.live_wallpaper" android:required="true" />
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
 
+    <!-- The sun and moon for where the phone is. Coarse only, and only read while Settings is open. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:name=".SolcoApp"
         android:allowBackup="false"

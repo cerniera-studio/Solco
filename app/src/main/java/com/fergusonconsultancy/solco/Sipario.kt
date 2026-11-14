@@ -104,22 +104,21 @@ class Env {
     var orn = 1f
     var month = 0f
 
-    /** Approximate Leeds sunrise and sunset, local clock hours, by month. */
+    /** The real sunrise and sunset for the phone's place (the Kit's Sky), in local clock hours. */
     fun refreshSky() {
         val c = Calendar.getInstance()
         val h = c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f
-        val r = SUN[c.get(Calendar.MONTH)][0]; val s = SUN[c.get(Calendar.MONTH)][1]
+        val d = Sky.day()
+        fun hours(t: java.time.Instant) = t.atZone(java.time.ZoneId.systemDefault()).let { it.hour + it.minute / 60f + it.second / 3600f }
+        val (r, s) = when {
+            d.sunrise != null && d.sunset != null -> hours(d.sunrise!!) to hours(d.sunset!!)
+            d.noonAltitude > 0 -> -1f to 25f   // midnight sun: day all day
+            else -> 12f to 12f                 // polar night: no day at all
+        }
         day = smooth(r - .5f, r + .5f, h) * (1f - smooth(s - .5f, s + .5f, h))
-        prog = cl((h - r) / (s - r))
+        prog = if (s > r) cl((h - r) / (s - r)) else 0f
         afterSet = h > s
         month = c.get(Calendar.MONTH) + (c.get(Calendar.DAY_OF_MONTH) - 1) / 30f
-    }
-
-    companion object {
-        private val SUN = arrayOf(
-            floatArrayOf(8.2f, 16.1f), floatArrayOf(7.4f, 17.1f), floatArrayOf(6.4f, 18.0f), floatArrayOf(6.3f, 19.9f),
-            floatArrayOf(5.2f, 20.8f), floatArrayOf(4.6f, 21.6f), floatArrayOf(5.0f, 21.4f), floatArrayOf(5.9f, 20.4f),
-            floatArrayOf(6.9f, 19.2f), floatArrayOf(7.4f, 17.9f), floatArrayOf(7.4f, 16.2f), floatArrayOf(8.2f, 15.7f))
     }
 }
 
