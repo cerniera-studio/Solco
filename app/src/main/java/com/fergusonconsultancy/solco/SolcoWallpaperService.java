@@ -123,6 +123,16 @@ public class SolcoWallpaperService extends WallpaperService {
             }
         };
 
+        /** Sveglia's dawn: its see-through alarm screen says how far the dawn has come, about once a second. */
+        private final BroadcastReceiver dawn = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) {
+                DawnGlow.INSTANCE.set(i.getFloatExtra(DawnGlow.EXTRA_P, -1f));
+                if (view == null) return;
+                view.requestRender();
+            }
+        };
+
         @Override
         public void onCreate(SurfaceHolder surfaceHolder) {
             super.onCreate(surfaceHolder);
@@ -217,6 +227,9 @@ public class SolcoWallpaperService extends WallpaperService {
                 else c.registerReceiver(clock, f);
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED);
                 else c.registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                // Sveglia is another app, so this one is exported; it only carries the dawn's progress
+                if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION), Context.RECEIVER_EXPORTED);
+                else c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION));
                 tiltSensor(true);
             } else {
                 try {
@@ -225,6 +238,10 @@ public class SolcoWallpaperService extends WallpaperService {
                 }
                 try {
                     c.unregisterReceiver(battery);
+                } catch (IllegalArgumentException ignored) {
+                }
+                try {
+                    c.unregisterReceiver(dawn);
                 } catch (IllegalArgumentException ignored) {
                 }
                 tiltSensor(false);
