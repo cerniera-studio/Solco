@@ -40,7 +40,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     private var progPts = 0
     private var progTex = 0
     private val vbo = IntArray(2)
-    private val tex = IntArray(2)
+    private val tex = IntArray(3)
     private var posArr = FloatArray(0)
     private var posBuf: FloatBuffer? = null
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
@@ -62,7 +62,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         progPts = program(PTS_V, PTS_F)
         progTex = program(TEX_V, TEX_F)
         GLES20.glGenBuffers(2, vbo, 0)
-        GLES20.glGenTextures(2, tex, 0)
+        GLES20.glGenTextures(3, tex, 0)
+        glowLevel = -1
         dirtyBuild = true
         dirtySky = true
         failed = false
@@ -182,6 +183,21 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
 
     private var lastBuildMs = 0L
 
+    /** Sveglia's dawn glow, repainted only when its level moves a fortieth (40 steps over the dawn). */
+    private var glowLevel = -1
+
+    private fun drawGlow(s: Scene) {
+        val q = DawnGlow.now()
+        if (q < 0f) { glowLevel = -1; return }
+        val level = (q * 40).toInt()
+        if (level != glowLevel) {
+            val b = DawnGlow.paint(w, h, s.cx, s.cy, s.r, q)
+            upload(tex[2], b); b.recycle()
+            glowLevel = level
+        }
+        drawQuad(tex[2], 0f, 0f, w.toFloat(), h.toFloat())
+    }
+
     private fun paintSky() {
         val s = scene ?: return
         val sky = Sky.now()
@@ -253,6 +269,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             GLES20.glDisableVertexAttribArray(aCol)
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
         }
+        // Sveglia's dawn, when its alarm screen is see-through over Solco: over the grain, under the sun
+        drawGlow(s)
         val half = discSize / 2f
         drawQuad(tex[1], disc[0] - half, disc[1] - half, disc[0] + half, disc[1] + half)
 
