@@ -210,7 +210,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         discSize = bmp.width
         upload(tex[1], bmp)
         bmp.recycle()
-        sparks = sky.sparks.map { s.spark(it) }
+        sparks = sky.sparks.map { s.spark(it, sky) }
         if (sparks.isNotEmpty()) SparkPainter.paint(finish).let { upload(tex[3], it); it.recycle() }
         dirtySky = false
     }

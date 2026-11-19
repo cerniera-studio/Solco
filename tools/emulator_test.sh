@@ -48,13 +48,21 @@ adb shell run-as $PKG cat shared_prefs/solco.xml | grep -o 'conc_[a-z]*">[A-Z]*'
 adb shell am force-stop $PKG
 adb shell am start -W -n $PKG/.SettingsActivity --es night 2026-11-19T23:30:00Z >/dev/null; sleep 7
 adb exec-out screencap -p > shot-notturno.png
-adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1
-python3 - <<'PY' | tee -a shapes.txt
+# Scroll (in the margin, off the live wallpaper) until the line under the Notturno switch is on screen
+SZ=$(adb shell wm size | grep -o "[0-9]*x[0-9]*" | tail -1); SH=${SZ#*x}
+said=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1
+  said=$(python3 -c "
 import re
 x=open('ui.xml',encoding='utf-8').read()
-lines=[t for t in re.findall(r'text="([^"]*)"',x) if t.startswith(("Now:","Tonight"))]
-print(("::notice::Notturno says: "+lines[0]) if lines else "::error::Notturno line not found")
-PY
+l=[t for t in re.findall(r'text=\"([^\"]*)\"',x) if t.startswith(('Now:','Tonight'))]
+print(l[0] if l else '')")
+  [ -n "$said" ] && break
+  adb shell input swipe 8 $((SH*3/4)) 8 $((SH/3)) 300; sleep 1
+done
+adb exec-out screencap -p > shot-notturno-line.png
+if [ -n "$said" ]; then echo "::notice::Notturno says: $said" | tee -a shapes.txt; else echo "::error::Notturno line not found" | tee -a shapes.txt; fi
 adb shell input keyevent KEYCODE_HOME
 
 # The system's live wallpaper preview: what the home screen will show

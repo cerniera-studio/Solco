@@ -76,7 +76,7 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         val sky = Sky.now(Prefs.notturno(context), Notturno.previewAt)
         dpos = s.disc(sky)
         disc = if (sky.shown) DiscPainter.paint(finish, sky, Prefs.luna(context), dpos[2], dp) else null
-        sparks = sky.sparks.map { s.spark(it) }
+        sparks = sky.sparks.map { s.spark(it, sky) }
         spark = if (sparks.isNotEmpty()) SparkPainter.paint(finish) else null
         scene = s
         invalidate()
@@ -164,7 +164,7 @@ fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) 
     val sky = Sky.now(Prefs.notturno(c), Notturno.previewAt)
     val d = s.disc(sky)
     val disc = if (sky.shown) DiscPainter.paint(f, sky, Prefs.luna(c), d[2], dp) else null
-    val sp = sky.sparks.map { s.spark(it) }
+    val sp = sky.sparks.map { s.spark(it, sky) }
     val spark = if (sp.isNotEmpty()) SparkPainter.paint(f) else null
     ScenePainter().draw(cv, s, f, back, disc, d[0], d[1], max(1f, dp * 1.05f * 1.6f), sp, spark)
     back.recycle(); disc?.recycle(); spark?.recycle()

@@ -247,9 +247,18 @@ class Scene(
      * height, on a ring nearer the hinge for the east and further out for the west, so the order
      * along the arc is the order of height in the real sky.
      */
-    fun spark(p: Spark): FloatArray {
+    fun spark(p: Spark, sky: SkyState? = null): FloatArray {
         val phi = Math.toRadians(-60.0 + 120.0 * p.alt).toFloat()
-        val ring = r * (.22f + .18f * p.west)
+        var ring = r * (.22f + .18f * p.west)
+        // Never on the moon: a spark that would sit on the disc moves out along its ray, clear of it
+        if (sky != null && sky.shown) {
+            val d = disc(sky)
+            val clear = d[2] + 16f * dp
+            repeat(2) {
+                val x = gcx + cos(phi) * ring; val y = gcy - sin(phi) * ring
+                if (hypot(sx(x, y) - d[0], sy(x, y) - d[1]) < clear) ring = r * .30f + clear * (if (ring >= r * .30f) 1f else -1f)
+            }
+        }
         val x = gcx + cos(phi) * ring; val y = gcy - sin(phi) * ring
         return floatArrayOf(sx(x, y), sy(x, y), SparkPainter.width(p.size, dp))
     }
