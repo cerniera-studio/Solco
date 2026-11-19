@@ -65,7 +65,7 @@ enum class Linger(val title: String, val decay: Float) {
 object Prefs {
     private const val NAME = "solco"
     /** The keys that change how the wallpaper looks. Anything else (growth, diagnostics) must not redraw it. */
-    private val LOOK = setOf("style", "finish", "luna", "concentrato", "sky_at")
+    private val LOOK = setOf("style", "finish", "luna", "notturno", "concentrato", "sky_at")
 
     @JvmStatic fun of(c: Context): SharedPreferences = c.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
     @JvmStatic fun isLook(key: String?) = key != null && key in LOOK
@@ -76,6 +76,8 @@ object Prefs {
         return runCatching { Finish.valueOf(name) }.getOrDefault(Finish.VISCONTI)
     }
     fun luna(c: Context) = of(c).getBoolean("luna", true)
+    /** Notturno (19 Nov 2026): the real night sky. */
+    fun notturno(c: Context) = of(c).getBoolean("notturno", true)
     fun concentrato(c: Context) = of(c).getBoolean("concentrato", true)
     @JvmStatic fun trigger(c: Context) = runCatching { Trigger.valueOf(of(c).getString("conc_trigger", null) ?: "FLICK") }.getOrDefault(Trigger.FLICK)
     @JvmStatic fun depth(c: Context) = runCatching { Depth.valueOf(of(c).getString("conc_depth", null) ?: "MOST") }.getOrDefault(Depth.MOST)
@@ -87,6 +89,7 @@ object Prefs {
     fun setStyle(c: Context, s: Style) = of(c).edit().putString("style", s.name).apply()
     fun setFinish(c: Context, f: Finish) = of(c).edit().putString("finish", f.name).apply()
     fun setLuna(c: Context, on: Boolean) = of(c).edit().putBoolean("luna", on).apply()
+    fun setNotturno(c: Context, on: Boolean) = of(c).edit().putBoolean("notturno", on).apply()
     fun setConcentrato(c: Context, on: Boolean) = of(c).edit().putBoolean("concentrato", on).apply()
 
     /** Sipario's scene. Its engine listens for this key alone. */

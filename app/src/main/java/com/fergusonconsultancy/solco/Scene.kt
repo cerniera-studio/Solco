@@ -242,6 +242,18 @@ class Scene(
         return floatArrayOf(sx(x, y), sy(x, y), rad)
     }
 
+    /**
+     * Notturno: where a planet's spark sits, x, y and drawn width. On the disc's arc by its own
+     * height, on a ring nearer the hinge for the east and further out for the west, so the order
+     * along the arc is the order of height in the real sky.
+     */
+    fun spark(p: Spark): FloatArray {
+        val phi = Math.toRadians(-60.0 + 120.0 * p.alt).toFloat()
+        val ring = r * (.22f + .18f * p.west)
+        val x = gcx + cos(phi) * ring; val y = gcy - sin(phi) * ring
+        return floatArrayOf(sx(x, y), sy(x, y), SparkPainter.width(p.size, dp))
+    }
+
     // ---- Forces ----
     /**
      * The fold: a tangential push along the swing, outer grain first and furthest. [dir] is 1 for

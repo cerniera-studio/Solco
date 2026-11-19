@@ -40,7 +40,10 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     private var progPts = 0
     private var progTex = 0
     private val vbo = IntArray(2)
-    private val tex = IntArray(3)
+    private val tex = IntArray(4)
+    /** Notturno's planets for the current sky: x, y, width. */
+    private var sparks: List<FloatArray> = emptyList()
+    private var shown = true
     private var posArr = FloatArray(0)
     private var posBuf: FloatBuffer? = null
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
@@ -62,7 +65,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         progPts = program(PTS_V, PTS_F)
         progTex = program(TEX_V, TEX_F)
         GLES20.glGenBuffers(2, vbo, 0)
-        GLES20.glGenTextures(3, tex, 0)
+        GLES20.glGenTextures(4, tex, 0)
         glowLevel = -1
         dirtyBuild = true
         dirtySky = true
@@ -200,12 +203,15 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
 
     private fun paintSky() {
         val s = scene ?: return
-        val sky = Sky.now()
+        val sky = Sky.now(Prefs.notturno(ctx))
         disc = s.disc(sky)
+        shown = sky.shown
         val bmp = DiscPainter.paint(finish, sky, Prefs.luna(ctx), disc[2], s.dp)
         discSize = bmp.width
         upload(tex[1], bmp)
         bmp.recycle()
+        sparks = sky.sparks.map { s.spark(it) }
+        if (sparks.isNotEmpty()) SparkPainter.paint(finish).let { upload(tex[3], it); it.recycle() }
         dirtySky = false
     }
 
@@ -272,7 +278,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         // Sveglia's dawn, when its alarm screen is see-through over Solco: over the grain, under the sun
         drawGlow(s)
         val half = discSize / 2f
-        drawQuad(tex[1], disc[0] - half, disc[1] - half, disc[0] + half, disc[1] + half)
+        if (shown) drawQuad(tex[1], disc[0] - half, disc[1] - half, disc[0] + half, disc[1] + half)
+        for (p in sparks) { val hw = p[2] / 2f; drawQuad(tex[3], p[0] - hw, p[1] - hw, p[0] + hw, p[1] + hw) }
 
         if (!reported) {
             reported = true
