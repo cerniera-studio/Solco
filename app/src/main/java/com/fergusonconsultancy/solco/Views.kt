@@ -46,6 +46,8 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
     private var back: Bitmap? = null
     private var disc: Bitmap? = null
     private var dpos = FloatArray(3)
+    private var spark: Bitmap? = null
+    private var sparks: List<FloatArray> = emptyList()
     private var finish = Finish.VISCONTI
     private val painter = ScenePainter()
 
@@ -69,11 +71,13 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         val dp = resources.displayMetrics.density
         val (lvl, chg) = Power.read(context)
         val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0), level = lvl, charging = chg, rotation = rotation)
-        back?.recycle(); disc?.recycle()
+        back?.recycle(); disc?.recycle(); spark?.recycle()
         back = Backdrop.paint(s, finish)
-        val sky = Sky.now()
+        val sky = Sky.now(Prefs.notturno(context), Notturno.previewAt)
         dpos = s.disc(sky)
-        disc = DiscPainter.paint(finish, sky, Prefs.luna(context), dpos[2], dp)
+        disc = if (sky.shown) DiscPainter.paint(finish, sky, Prefs.luna(context), dpos[2], dp) else null
+        sparks = sky.sparks.map { s.spark(it, sky) }
+        spark = if (sparks.isNotEmpty()) SparkPainter.paint(finish) else null
         scene = s
         invalidate()
     }
@@ -93,7 +97,7 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         val s = scene ?: return
         val b = back ?: return
         val moving = s.step(SystemClock.uptimeMillis())
-        painter.draw(canvas, s, finish, b, disc, dpos[0], dpos[1], max(1f, s.dp * 1.05f))
+        painter.draw(canvas, s, finish, b, disc, dpos[0], dpos[1], max(1f, s.dp * 1.05f), sparks, spark)
         if (moving) postInvalidateOnAnimation()
     }
 
@@ -157,11 +161,13 @@ fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) 
     val rings = if (style == Style.TRONCO) Growth.sample(30) else FloatArray(0)
     val s = Scene(w, h, dp, style, rings, coverOverride = true, level = Power.read(c).first)
     val back = Backdrop.paint(s, f)
-    val sky = Sky.now()
+    val sky = Sky.now(Prefs.notturno(c), Notturno.previewAt)
     val d = s.disc(sky)
-    val disc = DiscPainter.paint(f, sky, Prefs.luna(c), d[2], dp)
-    ScenePainter().draw(cv, s, f, back, disc, d[0], d[1], max(1f, dp * 1.05f * 1.6f))
-    back.recycle(); disc.recycle()
+    val disc = if (sky.shown) DiscPainter.paint(f, sky, Prefs.luna(c), d[2], dp) else null
+    val sp = sky.sparks.map { s.spark(it, sky) }
+    val spark = if (sp.isNotEmpty()) SparkPainter.paint(f) else null
+    ScenePainter().draw(cv, s, f, back, disc, d[0], d[1], max(1f, dp * 1.05f * 1.6f), sp, spark)
+    back.recycle(); disc?.recycle(); spark?.recycle()
 }
 
 /** A live view that keeps its own shape and is told how tall it may grow. */

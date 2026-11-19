@@ -9,10 +9,13 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.PI
+import kotlin.math.acos
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sin
 import com.cerniera.kit.Sky as KitSky
+import com.cerniera.kit.moonAt
+import com.cerniera.kit.planets
 
 /**
  * The disc's force: the real sky, read from the Kit's [KitSky] for the phone's place.
@@ -22,7 +25,21 @@ import com.cerniera.kit.Sky as KitSky
  * stays low all day, in June it rides high. By night it is the moon, riding an arc from sunset to
  * the next sunrise. Sunrise and sunset are the real ones, not 06:00 and 18:00.
  */
-data class SkyState(val day: Boolean, val alt: Float, val phase: Float, val minutes: Int)
+data class SkyState(
+    val day: Boolean, val alt: Float, val phase: Float, val minutes: Int,
+    /** Notturno: false while the real moon is below the horizon, so no disc is drawn. */
+    val shown: Boolean = true,
+    /** Notturno: which way the moon's lit side faces, degrees clockwise from up; NaN draws it lit to the side as before. */
+    val limb: Float = Float.NaN,
+    /** Notturno: the bright planets up after civil dusk. */
+    val sparks: List<Spark> = emptyList(),
+)
+
+/**
+ * A planet as a spark of light (Notturno). [alt] is scaled as the disc's is (0 the horizon, 1 the
+ * highest it could climb here); [west] 0 for due east to 1 for due west; [size] 0 to 1 by brightness.
+ */
+data class Spark(val name: String, val alt: Float, val west: Float, val size: Float)
 
 object Sky {
 
@@ -97,8 +114,12 @@ object Sky {
         }
     }
 
-    fun now(): SkyState {
-        val at = Instant.now()
+    /**
+     * The sky now. With [notturno] on, the night is the real one (19 Nov 2026): the disc is the
+     * moon at its true height, phase and tilt, absent while it is set, and after civil dusk the
+     * bright planets come out as sparks. Off, the moon rides the old arc from sunset to sunrise.
+     */
+    fun now(notturno: Boolean = false, at: Instant = Instant.now()): SkyState {
         val zone = ZoneId.systemDefault()
         val local = at.atZone(zone)
         val minutes = local.hour * 60 + local.minute
@@ -110,6 +131,7 @@ object Sky {
             val a = (sin(Math.toRadians(sun.altitude.coerceAtLeast(0.0))) / sin(Math.toRadians(top))).coerceIn(0.0, 1.0)
             return SkyState(true, a.toFloat(), phase, minutes)
         }
+        if (notturno) return night(at, sun.altitude, minutes)
         // Night: the moon's arc from the last sunset to the next sunrise
         val today = local.toLocalDate()
         val before = if (local.hour < 12) day(today.minusDays(1), zone).sunset else day(today, zone).sunset
@@ -118,6 +140,21 @@ object Sky {
             ((at.toEpochMilli() - before.toEpochMilli()).toDouble() / (after.toEpochMilli() - before.toEpochMilli())).coerceIn(0.0, 1.0)
         else .5 // polar night or day: no sunset or sunrise to measure from
         return SkyState(false, sin(PI * prog).toFloat(), phase, minutes)
+    }
+
+    private fun night(at: Instant, sunAlt: Double, minutes: Int): SkyState {
+        val m = KitSky.moonAt(place, at)
+        // Highest the moon can climb here: the sun's midsummer height plus the moon's 5 degree tilt
+        val top = min(90.0, 90 - abs(place.lat) + 28.6)
+        fun scaled(alt: Double) = (sin(Math.toRadians(alt.coerceAtLeast(0.0))) / sin(Math.toRadians(top))).coerceIn(0.0, 1.0).toFloat()
+        // The phase the painter draws (0 new, 0.5 full), from the moon's true lit share
+        val base = (acos((1 - 2 * m.illumination).coerceIn(-1.0, 1.0)) / (2 * PI)).toFloat()
+        val phase = if (m.waxing) base else 1f - base
+        val sparks = if (sunAlt > KitSky.CIVIL) emptyList() else KitSky.planets(place, at).filter { it.visible }.map {
+            Spark(it.name, scaled(it.altitude), ((it.azimuth - 90.0) / 180.0).coerceIn(0.0, 1.0).toFloat(),
+                ((2.5 - it.magnitude) / 6.5).coerceIn(0.0, 1.0).toFloat())
+        }
+        return SkyState(false, scaled(m.altitude), phase, minutes, shown = m.up, limb = m.brightLimb.toFloat(), sparks = sparks)
     }
 
     /** 0 is new, 0.5 full. From the Kit (the mean month, good to about a day). */

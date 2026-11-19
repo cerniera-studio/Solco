@@ -49,6 +49,8 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         // A crash from the last run is shown first, with Share, Copy and Try again
         if (Crash.show(this, "Solco")) return
+        // For the emulator walk: draw the previews at a given moment (Notturno at night)
+        intent?.getStringExtra("night")?.let { v -> runCatching { Notturno.fixed = java.time.Instant.parse(v) } }
         // Solco's settings stay in Visconti, whatever the phone's light: the wallpaper is its own light
         Kit.dark = true
 
@@ -110,6 +112,8 @@ class SettingsActivity : Activity() {
         screen.add(Card(this).apply {
             row(Row(this@SettingsActivity, "True moon phase", "At night the disc shows tonight's moon instead of a full circle.",
                 Toggle(this@SettingsActivity, Prefs.luna(this@SettingsActivity)) { Prefs.setLuna(this@SettingsActivity, it); repaintAll() }))
+            row(Row(this@SettingsActivity, "Notturno", "After dusk, the real night: the moon where it is and tilted as it is, gone when it has set, and the bright planets as sparks.",
+                Toggle(this@SettingsActivity, Prefs.notturno(this@SettingsActivity)) { Prefs.setNotturno(this@SettingsActivity, it); repaintAll(); showNight() }))
         })
         screen.add(lunaNote.apply { setPadding(px(4), px(10), 0, 0) })
         // Where the sun and moon are read for: the phone's place, or Leeds until location is allowed
@@ -144,9 +148,7 @@ class SettingsActivity : Activity() {
         action.text = if (ours) "Solco is your wallpaper" else "Set as wallpaper"
         action.background = if (ours) rounded(0, px(28).toFloat(), Kit.HAIRLINE, px(1)) else rounded(Kit.CHAMPAGNE, px(28).toFloat())
         action.setTextColor(if (ours) Kit.INK else Kit.GROUND)
-        val sky = Sky.now()
-        lunaNote.text = if (sky.day) "Tonight: ${Sky.phaseName(Sky.moonPhase(System.currentTimeMillis() + 12 * 3_600_000L))}."
-        else "Now: ${Sky.phaseName(sky.phase)}."
+        showNight()
         showPlace()
         if (Sky.hasLocation(this)) Sky.follow(this) { moved -> showPlace(); if (moved) repaintAll() }
         syncTronco()
@@ -206,6 +208,8 @@ class SettingsActivity : Activity() {
         styleTiles.forEach { (_, t) -> t.refresh(t.chosen, true) }
         preview.rebuild()
     }
+
+    private fun showNight() { lunaNote.text = runCatching { Notturno.describe(Prefs.notturno(this)) }.getOrDefault("") }
 
     private fun repaintAll() {
         styleTiles.forEach { (_, t) -> t.refresh(t.chosen, true) }

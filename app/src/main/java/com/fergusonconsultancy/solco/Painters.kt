@@ -59,6 +59,9 @@ object DiscPainter {
             fill.color = withAlpha(col, .13f)
             g.drawCircle(k, k, rad, fill)
             val p = sky.phase
+            // Notturno: turn the lit side to face the way it really does tonight (drawn lit right when waxing, left when waning)
+            g.save()
+            if (!sky.limb.isNaN()) g.rotate(sky.limb - if (p < .5f) 90f else 270f, k, k)
             val rx = max(.01f, rad * abs(cos(2 * PI * p)).toFloat())
             val ell = RectF(k - rx, k - rad, k + rx, k + rad)
             val path = Path()
@@ -72,6 +75,7 @@ object DiscPainter {
             path.close()
             fill.color = withAlpha(col, dim)
             g.drawPath(path, fill)
+            g.restore()
         } else {
             fill.color = withAlpha(col, dim)
             g.drawCircle(k, k, rad, fill)
@@ -104,13 +108,36 @@ object DiscPainter {
     }
 }
 
+/**
+ * Notturno's planets: a point of light with a soft halo, in the finish's night disc colour. One
+ * small picture, drawn at each planet's size. The core is solid, so a spark reads as grain that
+ * happens to be lit rather than as an icon.
+ */
+object SparkPainter {
+    const val PX = 48
+    fun paint(f: Finish): Bitmap {
+        val b = Bitmap.createBitmap(PX, PX, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        val k = PX / 2f
+        val halo = RadialGradient(k, k, k, intArrayOf(withAlpha(f.discNight, .55f), withAlpha(f.discNight, .12f), withAlpha(f.discNight, 0f)),
+            floatArrayOf(0f, .35f, 1f), Shader.TileMode.CLAMP)
+        c.drawCircle(k, k, k, Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = halo })
+        c.drawCircle(k, k, PX * .09f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(0xFFFAF0, 1f) })
+        return b
+    }
+
+    /** The drawn width of a spark, px: its halo grows with brightness (Venus widest). */
+    fun width(size: Float, dp: Float) = (10f + 14f * size) * dp
+}
+
 /** Draws a scene with a Canvas, for the settings preview and its tiles. The wallpaper uses the GPU. */
 class ScenePainter {
     private var buf = Array(6) { FloatArray(0) }
     private val cnt = IntArray(6)
     private val paint = Paint().apply { strokeCap = Paint.Cap.SQUARE }
 
-    fun draw(cv: Canvas, s: Scene, f: Finish, back: Bitmap, disc: Bitmap?, dx: Float, dy: Float, dot: Float) {
+    fun draw(cv: Canvas, s: Scene, f: Finish, back: Bitmap, disc: Bitmap?, dx: Float, dy: Float, dot: Float,
+             sparks: List<FloatArray> = emptyList(), spark: Bitmap? = null) {
         cv.drawBitmap(back, 0f, 0f, null)
         if (buf[0].size < s.n * 2) buf = Array(6) { FloatArray(s.n * 2) }
         cnt.fill(0)
@@ -128,5 +155,9 @@ class ScenePainter {
             cv.drawPoints(buf[bi], 0, cnt[bi], paint)
         }
         if (disc != null) cv.drawBitmap(disc, dx - disc.width / 2f, dy - disc.height / 2f, null)
+        if (spark != null) for (p in sparks) {
+            val hw = p[2] / 2f
+            cv.drawBitmap(spark, null, RectF(p[0] - hw, p[1] - hw, p[0] + hw, p[1] + hw), null)
+        }
     }
 }
