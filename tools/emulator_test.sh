@@ -185,7 +185,4 @@ if grep -A1 "FATAL EXCEPTION" app-log.txt | grep -q "Process: $PKG" || grep -qE 
   grep -A 14 -E "FATAL EXCEPTION|build failed|frame failed" app-log.txt | head -40
   exit 1
 fi
-# Pop-up windows and a turn (19 Nov 2026). It reboots the emulator to turn pop-up windows on, so
-# it runs last, with its own log and crash check.
-bash tools/windows.sh || exit 1
 exit 0

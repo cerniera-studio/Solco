@@ -7,8 +7,8 @@
 #    the live wallpaper and Set as wallpaper in view each time (files/layout.json).
 # 2. Solco's settings scrolled down keep their place across a turn (the activity is rebuilt).
 #
-# Pop-up windows need freeform support, which the emulator only reads at boot: this reboots it,
-# so it runs last.
+# Pop-up windows need freeform support, which the emulator only reads at boot: this reboots it.
+# It runs in its own job, on API 33: the main job's API 35 emulator ignores --windowingMode 5.
 PKG=com.fergusonconsultancy.solco
 out=windows.txt; : > $out
 note() { echo "::notice::$*" | tee -a $out; }
@@ -16,6 +16,7 @@ fail() { echo "::error::$*" | tee -a $out; }
 warn() { echo "::warning::$*" | tee -a $out; }
 shot() { adb exec-out screencap -p > "shot-win-$1.png"; }
 
+[ -f Solco.apk ] && adb install -r Solco.apk
 adb shell settings put global enable_freeform_support 1
 adb shell settings put global force_resizable_activities 1
 adb reboot
@@ -88,7 +89,7 @@ adb shell settings put system user_rotation 0; sleep 3
 adb shell am force-stop $PKG
 adb shell wm size reset; adb shell wm density reset
 
-adb logcat -d > app-log-windows.txt
+{ echo "logcat after the windows test"; adb logcat -d; } > app-log-windows.txt
 if grep -A2 "FATAL EXCEPTION" app-log-windows.txt | grep -q "Process: $PKG"; then fail "Solco crashed in the windows test"; grep -A20 "FATAL EXCEPTION" app-log-windows.txt | head -40; fi
 grep -q "^::error::" $out && exit 1
 exit 0
