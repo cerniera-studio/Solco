@@ -237,7 +237,9 @@ class Stage(private val a: Activity, val screen: Screen) {
                 fun box(v: View): String { val p = IntArray(2); v.getLocationInWindow(p); return "[${p[0]}, ${p[1]}, ${p[0] + v.width}, ${p[1] + v.height}]" }
                 val inset = root.rootWindowInsets?.getInsets(WindowInsets.Type.systemBars())
                 val json = "{\"wide\": $wide, \"view\": [${root.width}, ${root.height}], \"insets\": [${inset?.left ?: 0}, ${inset?.top ?: 0}, ${inset?.right ?: 0}, ${inset?.bottom ?: 0}], " +
-                    "\"live\": ${box(live)}, \"action\": ${box(action)}}"
+                    "\"live\": ${box(live)}, \"action\": ${box(action)}, " +
+                    // Where the settings are scrolled to, for the windows test's turn
+                    "\"scroll\": ${root.findViewById<View>(com.cerniera.kit.R.id.kit_screen)?.scrollY ?: -1}}"
                 runCatching { java.io.File(a.filesDir, "layout.json").writeText(json) }
             }
         })
