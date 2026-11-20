@@ -53,10 +53,11 @@ import sys, json
 name, want, raw = sys.argv[1], sys.argv[2] == "true", sys.argv[3]
 try: d = json.loads(raw)
 except Exception: print(f"::error::{name}: no layout recorded"); sys.exit(0)
-vw, vh = d["view"]; il, it, ir, ib = d["insets"]
+vw, vh = d["view"]; il, it, ir, ib = d["insets"]; ox, oy = d.get("origin", [0, 0])
 bad = []
 for k in ("live", "action"):
-    l, t, r, b = d[k]
+    # Boxes are in window coordinates; in a pop-up window the view starts below its title bar
+    l, t, r, b = d[k]; l -= ox; r -= ox; t -= oy; b -= oy
     if l < 0 or t < 0 or r > vw or b > vh - ib: bad.append(f"{k} at {[l, t, r, b]} leaves the view {vw}x{vh}")
 if d["wide"] != want: bad.append(("two panes" if d["wide"] else "one column") + " where " + ("two panes" if want else "one column") + " was expected")
 lay = "two panes" if d["wide"] else "one column"
