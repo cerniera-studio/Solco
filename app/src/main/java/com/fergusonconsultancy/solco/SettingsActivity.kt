@@ -45,6 +45,20 @@ class SettingsActivity : Activity() {
     private lateinit var action: TextView
     private lateinit var diag: TextView
 
+    /** One column or two panes, as built. */
+    private var builtWide: Boolean? = null
+
+    /**
+     * Resizing a pop-up or split-screen window doesn't rebuild the activity, so it would keep the
+     * layout it was built with (seen in the windows test, 19 Nov 2026). Rebuild when the window
+     * crosses between one column and two panes; the settings keep their place (the Kit's Screen id).
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val was = builtWide ?: return
+        if (Stage.wideFor(newConfig) != was) recreate()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A crash from the last run is shown first, with Share, Copy and Try again
@@ -59,6 +73,7 @@ class SettingsActivity : Activity() {
             setPadding(px(4), px(8), 0, px(14))
         })
         val stage = Stage(this, screen)
+        builtWide = stage.wide
 
         // The wallpaper, live, in this screen's own shape (turned, if the screen is)
         val bounds = windowManager.currentWindowMetrics.bounds

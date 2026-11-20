@@ -181,7 +181,11 @@ interface Fits { var maxH: Int }
  * wallpaper and the action are in view at rest; only the choices sit below the fold.
  */
 class Stage(private val a: Activity, val screen: Screen) {
-    val wide: Boolean = a.resources.configuration.let { it.screenWidthDp > it.screenHeightDp || it.smallestScreenWidthDp >= 600 }
+    val wide: Boolean = wideFor(a.resources.configuration)
+
+    companion object {
+        fun wideFor(c: android.content.res.Configuration) = c.screenWidthDp > c.screenHeightDp || c.smallestScreenWidthDp >= 600
+    }
 
     /** Holds the live view and what goes under it; in a wide shape it fits them to the pane's height. */
     val stage = object : LinearLayout(a) {
@@ -206,9 +210,30 @@ class Stage(private val a: Activity, val screen: Screen) {
     fun add(v: View, top: Int = 0, fill: Boolean = false) =
         stage.addView(v, LinearLayout.LayoutParams(if (fill) -1 else -2, -2).apply { topMargin = top; gravity = Gravity.CENTER_HORIZONTAL })
 
+    /**
+     * One column in a short window (a pop-up window, a split): if the main action would end below
+     * the view at rest, the live view gives up just that much height (adaptive quality, 19 Nov 2026).
+     */
+    private fun keepActionInView() {
+        val root = screen.root
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            val fits = (0 until stage.childCount).map { stage.getChildAt(it) }.firstOrNull { it is Fits } as? Fits ?: return@addOnGlobalLayoutListener
+            val last = (0 until stage.childCount).map { stage.getChildAt(it) }.lastOrNull { it.visibility != View.GONE } ?: return@addOnGlobalLayoutListener
+            if (root.height <= 0 || root.scrollY != 0) return@addOnGlobalLayoutListener
+            val p = IntArray(2); val r = IntArray(2)
+            last.getLocationInWindow(p); root.getLocationInWindow(r)
+            val bars = root.rootWindowInsets?.getInsets(WindowInsets.Type.systemBars())?.bottom ?: 0
+            val limit = r[1] + root.height - maxOf(root.paddingBottom, bars) - a.px(8)
+            val over = p[1] + last.height - limit
+            // From the live view's height as drawn (often set by the width, under its cap)
+            val now = (fits as View).height
+            if (over > 0 && now - over >= a.px(120)) { fits.maxH = now - over; stage.requestLayout() }
+        }
+    }
+
     /** Call once everything is added: returns the Activity's content. */
     fun build(): View {
-        if (!wide) { screen.add(stage, a.px(6)); return screen.root }
+        if (!wide) { screen.add(stage, a.px(6)); keepActionInView(); return screen.root }
         // The panes keep clear of the bars and the camera on every side, so nothing hides under them
         val row = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -231,16 +256,22 @@ class Stage(private val a: Activity, val screen: Screen) {
      * in view at rest, in every shape. Written to files/layout.json once laid out.
      */
     fun record(root: View, live: View, action: View) {
+        root.viewTreeObserver.addOnScrollChangedListener { write(root, live, action) }
         root.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
+            override fun onGlobalLayout() { write(root, live, action) }
+        })
+    }
+
+    private fun write(root: View, live: View, action: View) {
                 if (live.height <= 0 || root.height <= 0) return
                 fun box(v: View): String { val p = IntArray(2); v.getLocationInWindow(p); return "[${p[0]}, ${p[1]}, ${p[0] + v.width}, ${p[1] + v.height}]" }
                 val inset = root.rootWindowInsets?.getInsets(WindowInsets.Type.systemBars())
-                val json = "{\"wide\": $wide, \"view\": [${root.width}, ${root.height}], \"insets\": [${inset?.left ?: 0}, ${inset?.top ?: 0}, ${inset?.right ?: 0}, ${inset?.bottom ?: 0}], " +
-                    "\"live\": ${box(live)}, \"action\": ${box(action)}}"
+                val o = IntArray(2).also { root.getLocationInWindow(it) }
+                val json = "{\"wide\": $wide, \"origin\": [${o[0]}, ${o[1]}], \"view\": [${root.width}, ${root.height}], \"insets\": [${inset?.left ?: 0}, ${inset?.top ?: 0}, ${inset?.right ?: 0}, ${inset?.bottom ?: 0}], " +
+                    "\"live\": ${box(live)}, \"action\": ${box(action)}, " +
+                    // Where the settings are scrolled to, for the windows test's turn
+                    "\"scroll\": ${root.findViewById<View>(com.cerniera.kit.R.id.kit_screen)?.scrollY ?: -1}}"
                 runCatching { java.io.File(a.filesDir, "layout.json").writeText(json) }
-            }
-        })
     }
 }
 
