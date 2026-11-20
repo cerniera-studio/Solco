@@ -225,7 +225,9 @@ class Stage(private val a: Activity, val screen: Screen) {
             val bars = root.rootWindowInsets?.getInsets(WindowInsets.Type.systemBars())?.bottom ?: 0
             val limit = r[1] + root.height - maxOf(root.paddingBottom, bars) - a.px(8)
             val over = p[1] + last.height - limit
-            if (over > 0 && fits.maxH - over >= a.px(120)) { fits.maxH -= over; stage.requestLayout() }
+            // From the live view's height as drawn (often set by the width, under its cap)
+            val now = (fits as View).height
+            if (over > 0 && now - over >= a.px(120)) { fits.maxH = now - over; stage.requestLayout() }
         }
     }
 
