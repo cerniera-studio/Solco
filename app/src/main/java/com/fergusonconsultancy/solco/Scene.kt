@@ -93,6 +93,16 @@ class Scene(
     private val nc = FloatArray(if (style == Style.NEBULOSA) cap else 0)
     var light: Float = light.coerceIn(0f, 1f)
         private set
+    /**
+     * Nebulosa moves as a fluid, not a wheel (21 Nov 2026): each grain keeps its home and its
+     * displacement in polar terms about the core, and returns along the swirl. The inner grain turns
+     * fast and the outer lags behind it, as in a whirlpool, so the arms shear and feather rather than
+     * turning as one rigid disc.
+     */
+    private val nbs = if (style == Style.NEBULOSA) cap else 0
+    private val pRh = FloatArray(nbs); private val pTh = FloatArray(nbs)
+    private val dRh = FloatArray(nbs); private val dTh = FloatArray(nbs)
+    private val wRh = FloatArray(nbs); private val wTh = FloatArray(nbs)
 
     val n: Int = when (style) {
         Style.SOLCO -> genSolco()
@@ -104,6 +114,12 @@ class Scene(
         Style.DELTA -> genDelta()
     }.also { k ->
         if (turned) for (i in 0 until k) { val x = hx[i]; val y = hy[i]; hx[i] = sx(x, y); hy[i] = sy(x, y) }
+    }
+
+    init {
+        if (style == Style.NEBULOSA) for (i in 0 until n) {
+            pRh[i] = hypot(hx[i] - cx, hy[i] - cy); pTh[i] = kotlin.math.atan2(hy[i] - cy, hx[i] - cx)
+        }
     }
 
     // ---- Marea: grain filled to the battery level, foam at the surface, sediment at the floor ----
@@ -370,13 +386,26 @@ class Scene(
         if (style != Style.NEBULOSA) return false
         val nt = t.coerceIn(0f, 1f)
         if (abs(nt - light) < .04f) return false
+        val was = light
         light = nt
         for (i in 0 until n) {
             val g = nebGlass(i, nt)
             val gx0 = Float.fromBits((g ushr 32).toInt()); val gy0 = Float.fromBits(g.toInt())
             val x = sx(gx0, gy0); val y = sy(gx0, gy0)
-            ox[i] += hx[i] - x; oy[i] += hy[i] - y
             hx[i] = x; hy[i] = y
+            // Keep the grain where it is and let the swirl carry it to its new arm, the short way round
+            val rho = hypot(x - cx, y - cy); val th = kotlin.math.atan2(y - cy, x - cx)
+            var d = pTh[i] + dTh[i] - th
+            while (d > 3.1416f) d -= 6.2832f
+            while (d < -3.1416f) d += 6.2832f
+            // An arm rewinds the whole way the light asks, outer grain furthest, never torn by taking
+            // the nearer way round: the turn it owes is the change in winding times how far out it lies
+            if (na[i] >= 0f) {
+                val owed = (1.3f * (nt - was)) * kotlin.math.ln((.05f + .90f * na[i]) / .05f)
+                d += 6.2832f * Math.round((owed - d) / 6.2832f)
+            }
+            dTh[i] = d; dRh[i] = pRh[i] + dRh[i] - rho
+            pRh[i] = rho; pTh[i] = th
         }
         return true
     }
@@ -494,6 +523,21 @@ class Scene(
     fun stir(dir: Int, fast: Boolean, concentrato: Boolean, now: Long, depth: Float = .75f, linger: Float = .95f) {
         val k0 = (if (fast) 7.5f else 4.2f) * dp * dir
         val spread = if (fast) 260f else 520f
+        if (style == Style.NEBULOSA) {
+            // A whirlpool, not a flywheel: the core is set turning first and fastest, and the turn
+            // spreads outwards, weaker and later, so the arms wind up and then unwind
+            val ref = r * .25f
+            for (i in 0 until n) {
+                val rho = pRh[i].coerceAtLeast(6f * dp)
+                // The faint dust between the arms barely stirs, so no bare corner opens up
+                val dust = if (na[i] < -1.5f) .2f else 1f
+                kick[i] = (if (fast) .030f else .018f) * dir * dust * sqrt(ref / rho).coerceIn(.35f, 2.2f) * (.75f + .5f * hash[i])
+                kickAt[i] = now + ((rho / r).coerceAtMost(1f) * spread * 1.6f).toLong()
+            }
+            empty = if (fast && concentrato) depth else 0f
+            decay = linger
+            return
+        }
         for (i in 0 until n) {
             val t = hypot(hx[i] - cx, hy[i] - cy) / r
             kick[i] = k0 * (.35f + .65f * t) * (.85f + .3f * hash[i])
@@ -536,7 +580,9 @@ class Scene(
         val gm = hypot(gx, gy).coerceAtLeast(1e-3f)
         val pull = if (slide) (gm - repose) / 9.81f * .9f * dp * dt else 0f
         val ux = gx / gm; val uy = gy / gm
+        val neb = style == Style.NEBULOSA
         for (i in 0 until n) {
+            if (neb) { val e = flow(i, now, dt); if (e > energy) energy = e; continue }
             val m = loose(i)
             if (m > 0f && (slide || abs(ox[i]) + abs(oy[i]) > .5f * dp)) {
                 if (slide) {
@@ -590,6 +636,44 @@ class Scene(
         val moving = energy > .01f * dp || pressed || empty > 0f || breathing
         if (!moving) last = 0L
         return moving
+    }
+
+    /**
+     * Nebulosa, one grain, one frame. Pushes from a finger or the fold are taken into the swirl;
+     * the turn relaxes with a stiffness that falls with distance from the core (inner fast, outer
+     * slow), each grain a little different, and with no overshoot, as a thick liquid settles. While
+     * it moves, a fixed field of small eddies curls its path; at rest the eddies are gone.
+     */
+    private fun flow(i: Int, now: Long, dt: Float): Float {
+        var th = pTh[i] + dTh[i]
+        var rho = (pRh[i] + dRh[i]).coerceAtLeast(0f)
+        val c = cos(th); val s = sin(th)
+        val rr = rho.coerceAtLeast(6f * dp)
+        if (vx[i] != 0f || vy[i] != 0f) {
+            wRh[i] += vx[i] * c + vy[i] * s
+            wTh[i] += (-vx[i] * s + vy[i] * c) / rr
+            vx[i] = 0f; vy[i] = 0f
+        }
+        if (kick[i] != 0f && now >= kickAt[i]) { wTh[i] += kick[i]; kick[i] = 0f }
+        val q = (r * .25f / rr).pow(1.5f).coerceIn(.12f, 6f) * (.75f + .5f * hash[i])
+        val kt = .0045f * q
+        val kr = .010f * (.75f + .5f * hash[i])
+        wTh[i] = (wTh[i] - dTh[i] * kt * dt) * kotlin.math.exp(-1.9f * sqrt(kt) * dt)
+        wRh[i] = (wRh[i] - dRh[i] * kr * dt) * kotlin.math.exp(-1.9f * sqrt(kr) * dt)
+        dTh[i] += wTh[i] * dt; dRh[i] += wRh[i] * dt
+        th = pTh[i] + dTh[i]
+        rho = (pRh[i] + dRh[i]).coerceAtLeast(0f)
+        var x = cx + cos(th) * rho; var y = cy + sin(th) * rho
+        val off = abs(dTh[i]) * rr + abs(dRh[i])
+        // Broad, slow eddies, wide enough that the arm bends rather than crimps
+        val amp = min(5f * dp, off * .10f)
+        if (amp > .2f * dp) {
+            x += sin(y / (97f * dp) + 1.3f * sin(x / (151f * dp))) * amp
+            y += sin(x / (113f * dp) + 1.3f * sin(y / (139f * dp))) * amp
+        }
+        ox[i] = x - hx[i]; oy[i] = y - hy[i]
+        if (kick[i] != 0f) return 1f
+        return abs(wTh[i]) * rr + abs(wRh[i]) + off * .01f
     }
 
     /** Interleaved x, y for every grain. */
