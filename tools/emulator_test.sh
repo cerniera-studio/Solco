@@ -133,10 +133,37 @@ adb exec-out screencap -p > shot-duna-after.png
 adb shell input keyevent KEYCODE_BACK; sleep 1
 adb shell wm size reset
 
+# 21 Nov 2026: Polvere, Nebulosa and Delta in every finish on the cover's shape, with Verderame. Delta is
+# given a week of charges; Polvere is left still for a while and woken; Nebulosa is shown dark then bright.
+NOW=$(date +%s%3N)
+WEEK=""
+for d in 6.6:0.62 5.7:0.55 4.4:0.18 3.6:0.70 2.7:0.48 1.6:0.66 0.5:0.58; do
+  age=${d%%:*}; gain=${d##*:}
+  WEEK="$WEEK$(python3 -c "print(int($NOW - $age * 86400000))"):$gain;"
+done
+adb shell wm size 1080x2520; sleep 2
+for st in POLVERE NEBULOSA DELTA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"charges\">${WEEK%;}</string>"
+  adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+  sleep 8
+  adb exec-out screencap -p > "shot-new-$st-$fi.png"
+  adb shell input keyevent KEYCODE_BACK; sleep 1
+done; done
+prefs "<string name=\"style\">NEBULOSA</string><string name=\"finish\">VERDERAME</string>"
+adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+adb emu sensor set light 0; sleep 8; adb exec-out screencap -p > shot-nebulosa-dark.png
+adb emu sensor set light 2000; sleep 8; adb exec-out screencap -p > shot-nebulosa-bright.png
+adb shell input keyevent KEYCODE_BACK; sleep 1
+prefs "<string name=\"style\">POLVERE</string><string name=\"finish\">TABACCO</string>"
+adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+sleep 8; adb exec-out screencap -p > shot-polvere-preview.png
+adb shell input keyevent KEYCODE_BACK; sleep 1
+adb shell wm size reset
+
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in SOLCO TRONCO MAREA DUNA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
-  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>"
+for st in SOLCO TRONCO MAREA DUNA POLVERE NEBULOSA DELTA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string><string name=\"charges\">${WEEK%;}</string>"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9
   adb shell input keyevent KEYCODE_BACK

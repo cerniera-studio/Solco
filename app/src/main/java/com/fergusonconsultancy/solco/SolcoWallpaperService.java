@@ -38,16 +38,44 @@ public class SolcoWallpaperService extends WallpaperService {
         }
     };
 
+    /**
+     * Delta's record: the plug going in and coming out, heard for as long as Solco is set (the screen
+     * is usually dark when it happens). Two broadcasts a charge; nothing in between.
+     */
+    private final BroadcastReceiver plug = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            kotlin.Pair<Float, Boolean> p = Power.INSTANCE.read(c);
+            boolean charging = Intent.ACTION_POWER_CONNECTED.equals(i.getAction()) || p.getSecond();
+            if (Intent.ACTION_POWER_DISCONNECTED.equals(i.getAction())) charging = false;
+            Charges.reconcile(c, p.getFirst(), charging);
+        }
+    };
+
+    /** Polvere: when the wallpaper was last hidden, so its return knows how long the phone lay still. */
+    static long hiddenAt = 0L;
+
     @Override
     public void onCreate() {
         super.onCreate();
         Growth.start(this);
         handler.postDelayed(growth, 60_000L);
+        IntentFilter f = new IntentFilter();
+        f.addAction(Intent.ACTION_POWER_CONNECTED);
+        f.addAction(Intent.ACTION_POWER_DISCONNECTED);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(plug, f, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(plug, f);
+        kotlin.Pair<Float, Boolean> p = Power.INSTANCE.read(this);
+        Charges.reconcile(this, p.getFirst(), p.getSecond());
     }
 
     @Override
     public void onDestroy() {
         handler.removeCallbacks(growth);
+        try {
+            unregisterReceiver(plug);
+        } catch (IllegalArgumentException ignored) {
+        }
         super.onDestroy();
     }
 
@@ -94,6 +122,7 @@ public class SolcoWallpaperService extends WallpaperService {
                 kotlin.Pair<Float, Boolean> p = Power.INSTANCE.from(i);
                 final float level = p.getFirst();
                 final boolean charging = p.getSecond();
+                Charges.reconcile(c, level, charging);
                 view.queueEvent(() -> renderer.power(level, charging));
                 view.requestRender();
             }
@@ -111,6 +140,24 @@ public class SolcoWallpaperService extends WallpaperService {
             } else if (gravity != null) {
                 sensors.unregisterListener(this, gravity);
                 lastGx = 99f; lastGy = 99f;
+            }
+        }
+
+        /** Nebulosa reads the room's light only while it is on screen; nothing else does. */
+        private Sensor lightSensor;
+        private boolean lighting;
+        private float lastLight = -1f;
+
+        private void lightSensor(boolean on) {
+            on = on && sensors != null && Prefs.INSTANCE.style(SolcoWallpaperService.this) == Style.NEBULOSA;
+            if (on == lighting) return;
+            lighting = on;
+            if (on) {
+                lightSensor = sensors.getDefaultSensor(Sensor.TYPE_LIGHT);
+                if (lightSensor != null) sensors.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            } else if (lightSensor != null) {
+                sensors.unregisterListener(this, lightSensor);
+                lastLight = -1f;
             }
         }
 
@@ -205,10 +252,14 @@ public class SolcoWallpaperService extends WallpaperService {
             if (view == null) return;
             if (v) {
                 view.onResume();
+                // Polvere: how long the phone lay untouched, while the wallpaper was out of sight
+                final long rest = hiddenAt > 0L ? android.os.SystemClock.elapsedRealtime() - hiddenAt : 0L;
+                if (rest > 0L) view.queueEvent(() -> renderer.rest(rest));
                 listen(true);
                 view.queueEvent(() -> renderer.refresh());
                 arrive();
             } else {
+                hiddenAt = android.os.SystemClock.elapsedRealtime();
                 listen(false);
                 view.onPause();
             }
@@ -231,6 +282,7 @@ public class SolcoWallpaperService extends WallpaperService {
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION), Context.RECEIVER_EXPORTED);
                 else c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION));
                 tiltSensor(true);
+                lightSensor(true);
             } else {
                 try {
                     c.unregisterReceiver(clock);
@@ -245,12 +297,24 @@ public class SolcoWallpaperService extends WallpaperService {
                 } catch (IllegalArgumentException ignored) {
                 }
                 tiltSensor(false);
+                lightSensor(false);
             }
         }
 
         @Override
         public void onSensorChanged(SensorEvent e) {
             int type = e.sensor.getType();
+            if (type == Sensor.TYPE_LIGHT) {
+                if (view == null || e.values.length < 1) return;
+                // Lux on a log scale, dark (under 1 lux) to bright (a lit room by a window, 1,000 lux and up),
+                // in sixteen steps so the sensor's flicker never stirs the grain
+                final float t = Math.round(Lumen.of(e.values[0]) * 16f) / 16f;
+                if (t == lastLight) return;
+                lastLight = t;
+                view.queueEvent(() -> renderer.light(t));
+                view.requestRender();
+                return;
+            }
             if (type == Sensor.TYPE_GRAVITY || type == Sensor.TYPE_ACCELEROMETER) {
                 if (view == null || e.values.length < 2) return;
                 // Gravity across the screen: device x to the right, device y up, so screen y is flipped;
@@ -290,7 +354,7 @@ public class SolcoWallpaperService extends WallpaperService {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences p, String key) {
             if (!Prefs.isLook(key) || view == null) return;
-            if (visible) { tiltSensor(false); tiltSensor(true); }
+            if (visible) { tiltSensor(false); tiltSensor(true); lightSensor(false); lightSensor(true); }
             view.queueEvent(() -> renderer.rebuild());
             view.requestRender();
             notifyColorsChanged();

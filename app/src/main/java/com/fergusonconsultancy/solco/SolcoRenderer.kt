@@ -87,6 +87,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         dirtySky = true
         val s = scene ?: return
         if (s.style == Style.TRONCO && (LocalDate.now() != builtDay || SystemClock.elapsedRealtime() - builtAt > 15 * 60_000L)) dirtyBuild = true
+        // Delta's channels silt up as they age: carved again once an hour at most
+        if (s.style == Style.DELTA && SystemClock.elapsedRealtime() - builtAt > 60 * 60_000L) dirtyBuild = true
     }
 
     fun stir(dir: Int, fast: Boolean) { pendingStir = dir; pendingFast = fast }
@@ -97,17 +99,34 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     fun touch(x: Float, y: Float, down: Boolean) { scene?.touch(x, y, down) }
 
     @Volatile private var builtLevel = -1f
+    @Volatile private var builtCharging = false
 
-    /** The battery changed: Marea refills when the level moves a whole percent, and breathes only on charge. */
+    /**
+     * The battery changed: Marea refills when the level moves a whole percent, and breathes only on
+     * charge. Delta carves a new channel when a charge begins or ends, and deepens it every 5% between.
+     */
     fun power(level: Float, charging: Boolean) {
         val s = scene ?: return
-        if (s.style != Style.MAREA) return
-        if (kotlin.math.abs(level - builtLevel) >= .01f) dirtyBuild = true
-        s.breathing = charging
+        when (s.style) {
+            Style.MAREA -> {
+                if (kotlin.math.abs(level - builtLevel) >= .01f) dirtyBuild = true
+                s.breathing = charging
+            }
+            Style.DELTA -> if (charging != builtCharging || (charging && kotlin.math.abs(level - builtLevel) >= .05f)) dirtyBuild = true
+            else -> {}
+        }
     }
 
     /** The tilt changed (Duna). Screen axes, y down. */
     fun tilt(x: Float, y: Float) { scene?.tilt(x, y) }
+
+    /** Nebulosa: the room's light, 0 to 1, kept for the next build and handed to the grain now. */
+    @Volatile private var light = .5f
+    fun light(t: Float) { light = t; scene?.setLight(t) }
+
+    /** Polvere: how long the phone lay untouched, applied once the grain for this screen is in place. */
+    private var pendingRest = 0L
+    fun rest(ms: Long) { pendingRest = ms }
 
     /** Everything a look needs, made away from the GL thread so the first frame never waits for it. */
     private class Prepared(val w: Int, val h: Int, val scene: Scene, val finish: Finish, val cols: FloatArray, val back: Bitmap, val ms: Long)
@@ -134,7 +153,10 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val dp = ctx.resources.displayMetrics.density
                 val (lvl, chg) = Power.read(ctx)
                 builtLevel = lvl
-                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation)
+                builtCharging = chg
+                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
+                    sky = if (style == Style.POLVERE) Sky.now(Prefs.notturno(ctx)) else null, light = light,
+                    charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0))
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
                     val c = f.grain[sc.col[i].toInt()]
@@ -204,6 +226,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     private fun paintSky() {
         val s = scene ?: return
         val sky = Sky.now(Prefs.notturno(ctx))
+        // Polvere's shaft falls from the disc: rebuilt once the sun or moon has moved on, or set
+        if (s.style == Style.POLVERE && (kotlin.math.abs(sky.alt - s.skyAlt) > .04f || sky.shown != s.skyShown)) dirtyBuild = true
         disc = s.disc(sky)
         shown = sky.shown
         val bmp = DiscPainter.paint(finish, sky, Prefs.luna(ctx), disc[2], s.dp)
@@ -244,6 +268,11 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (pendingStir != 0) {
             s.stir(pendingStir, pendingFast, Prefs.concentrato(ctx), now, Prefs.depth(ctx).grain, Prefs.linger(ctx).decay)
             pendingStir = 0
+        }
+        // The dust that settled while the phone lay still, once this screen's grain is final
+        if (pendingRest > 0L && !dirtyBuild && !building && ready == null) {
+            if (s.style == Style.POLVERE) s.settle(Polvere.share(pendingRest))
+            pendingRest = 0L
         }
         val moving = s.step(now)
 
@@ -383,4 +412,11 @@ uniform sampler2D uTex;
 varying vec2 vUv;
 void main() { gl_FragColor = texture2D(uTex, vUv); }"""
     }
+}
+
+/** Polvere: how much of the dust in the light settles while the phone lies untouched. */
+object Polvere {
+    /** Half has settled after about an hour still; nearly all after four. Glances settle none. */
+    @JvmStatic fun share(restMs: Long): Float =
+        if (restMs < 30_000L) 0f else (1f - kotlin.math.exp(-(restMs - 30_000L) / 5_200_000f)).coerceIn(0f, .96f)
 }
