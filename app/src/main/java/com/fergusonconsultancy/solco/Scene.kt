@@ -33,6 +33,12 @@ class Scene(
     charging: Boolean = false,
     /** The display's rotation (Surface.ROTATION_*), to tell which way a sideways surface was turned. */
     rotation: Int = 0,
+    /** Polvere: the sky the shaft of light falls from. Without one, or with the moon set, there is no shaft. */
+    sky: SkyState? = null,
+    /** Nebulosa: the room's light, 0 dark to 1 bright, which sets how tightly the arms wind. */
+    light: Float = .5f,
+    /** Delta: each charge of the week as age in days, gain and seed (see [Charges]). */
+    private val charges: FloatArray = FloatArray(0),
 ) {
     val cover: Boolean = coverOverride ?: FoldWatch.tall(w, h)
     /**
@@ -41,7 +47,7 @@ class Scene(
      * surface is a turned one; the display's rotation says which way. Tiles are never turned.
      */
     val quarter: Int = if (coverOverride != null || w <= h) 0 else if (rotation == 3) 3 else 1
-    private val turned = quarter != 0 && style != Style.MAREA
+    private val turned = quarter != 0 && style != Style.MAREA && style != Style.POLVERE
     /** The glass's own upright size, in which the hinge styles are laid out before turning. */
     private val gw: Int = if (turned) h else w
     private val gh: Int = if (turned) w else h
@@ -73,11 +79,29 @@ class Scene(
     private var lastX = 0f
     private var lastY = 0f
 
+    /** Polvere: the sky the shaft was built for, so the renderer knows when the sun has moved on. */
+    val skyAlt: Float = sky?.alt ?: -1f
+    val skyShown: Boolean = sky?.shown ?: false
+    private val skyAt: SkyState? = sky
+    /** Polvere: which grains hang in the light (and so can settle), and the floor they settle to. */
+    private val airborne = BooleanArray(if (style == Style.POLVERE) cap else 0)
+    private val floorY = h * .955f
+
+    /** Nebulosa: each grain's place in the galaxy, independent of how tightly it is wound. */
+    private val na = FloatArray(if (style == Style.NEBULOSA) cap else 0)
+    private val nb = FloatArray(if (style == Style.NEBULOSA) cap else 0)
+    private val nc = FloatArray(if (style == Style.NEBULOSA) cap else 0)
+    var light: Float = light.coerceIn(0f, 1f)
+        private set
+
     val n: Int = when (style) {
         Style.SOLCO -> genSolco()
         Style.TRONCO -> genTronco()
         Style.MAREA -> genMarea()
         Style.DUNA -> genDuna()
+        Style.POLVERE -> genPolvere()
+        Style.NEBULOSA -> genNebulosa()
+        Style.DELTA -> genDelta()
     }.also { k ->
         if (turned) for (i in 0 until k) { val x = hx[i]; val y = hy[i]; hx[i] = sx(x, y); hy[i] = sy(x, y) }
     }
@@ -223,6 +247,202 @@ class Scene(
                 val late = if (t > .8f) ((t - .8f) / .2f).pow(.7f) else 0f
                 dens = .10f + .85f * late
                 c = if (late > .3f) 0 else if (rng.next() < .8f) 1 else 2
+            }
+            if (rng.next() > dens) continue
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
+            k++
+        }
+        return k
+    }
+
+    // ---- Polvere: dust in a shaft of light from the disc; what has settled lies on the floor ----
+    private fun genPolvere(): Int {
+        val sk = skyAt
+        val d = if (sk != null && sk.shown) disc(sk) else null
+        // The shaft falls from the disc towards the floor, leaning away from the hinge
+        val side = if (d == null || d[0] >= cx) 1f else -1f
+        val lean = .42f * side
+        val ul = sqrt(lean * lean + 1f)
+        val ux = lean / ul; val uy = 1f / ul
+        val rng = Rng(71)
+        var k = 0; var guard = 0
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * w; val y = rng.next() * h
+            var dens: Float; var c: Int; var air = false
+            if (y > floorY + 1.5f * dp * sin(x / (w * .09f))) {
+                // The floor: everything that ever settled, densest at the bottom
+                dens = .55f + .35f * ((y - floorY) / (h - floorY)).coerceIn(0f, 1f); c = if (rng.next() < .3f) 0 else 2
+            } else if (d != null) {
+                val dx = x - d[0]; val dy = y - d[1]
+                val t = dx * ux + dy * uy
+                val perp = abs(-dx * uy + dy * ux)
+                val half = d[2] * .85f + t * .30f
+                if (t > 0f && perp < half) {
+                    // In the light: a fine haze, brighter motes, both fading as the shaft spreads and towards its edges
+                    val edge = 1f - (perp / half).pow(3f)
+                    val fade = (1f - t / (h * 1.1f)).coerceIn(.25f, 1f)
+                    val mote = rng.next() < .045f
+                    dens = (if (mote) 1f else .26f) * edge * fade; c = if (mote) 0 else 2; air = true
+                } else { dens = .010f; c = 2 }
+            } else { dens = .006f; c = 2 }
+            if (rng.next() > dens) continue
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next(); airborne[k] = air
+            k++
+        }
+        return k
+    }
+
+    /**
+     * Polvere: [share] of the dust in the light has settled while the phone lay still. It is put on the
+     * floor beneath where it hung, and the spring lifts it home, which is the picking up.
+     */
+    fun settle(share: Float) {
+        if (style != Style.POLVERE) return
+        val f = share.coerceIn(0f, 1f)
+        if (f <= 0f) return
+        for (i in 0 until n) {
+            if (!airborne[i] || hash[i] >= f) continue
+            val rest = floorY - (hash[i] / f) * 7f * dp - 1f * dp
+            ox[i] = (hash[i] - .5f) * 6f * dp
+            oy[i] = rest - hy[i]
+            vx[i] = 0f; vy[i] = 0f
+        }
+    }
+
+    // ---- Nebulosa: two arms wound round the hinge, tighter as the room darkens ----
+    private val nebR: Float get() = r * .92f
+
+    /** Where grain [i] sits at light [t], on the upright glass. */
+    private fun nebGlass(i: Int, t: Float): Long {
+        val big = nebR
+        val x: Float; val y: Float
+        when {
+            na[i] >= 0f -> {
+                val rho = big * (.05f + .90f * na[i])
+                val wind = 2.6f - 1.3f * t
+                val th = nc[i] + wind * kotlin.math.ln(rho / (big * .05f))
+                val spread = (big * .008f + rho * .07f) * (.75f + .45f * t)
+                x = gcx + cos(th) * rho - sin(th) * nb[i] * spread
+                y = gcy + sin(th) * rho + cos(th) * nb[i] * spread
+            }
+            na[i] > -1.5f -> {
+                val sig = big * (.030f + .03f * t)
+                x = gcx + nb[i] * sig; y = gcy + nc[i] * sig
+            }
+            else -> { x = nb[i] * gw; y = nc[i] * gh }
+        }
+        return (x.toBits().toLong() shl 32) or (y.toBits().toLong() and 0xFFFFFFFFL)
+    }
+
+    private fun gauss(rng: Rng): Float {
+        val u = rng.next().coerceAtLeast(1e-6f); val v = rng.next()
+        return sqrt(-2f * kotlin.math.ln(u)) * cos(6.2832f * v)
+    }
+
+    private fun genNebulosa(): Int {
+        val rng = Rng(83)
+        val total = (cap * .62f).toInt()
+        var k = 0
+        while (k < total) {
+            val u = rng.next()
+            val c: Int
+            when {
+                u < .11f -> { na[k] = -1f; nb[k] = gauss(rng); nc[k] = gauss(rng); c = 0 }
+                u < .19f -> { na[k] = -2f; nb[k] = rng.next(); nc[k] = rng.next(); c = 2 }
+                else -> {
+                    val a = rng.next().pow(1.35f)
+                    na[k] = a; nb[k] = gauss(rng); nc[k] = (if (rng.next() < .5f) 0f else 3.1416f) + (rng.next() - .5f) * .25f
+                    val p = rng.next()
+                    c = if (a < .3f) (if (p < .75f) 0 else 1) else if (p < .45f) 2 else if (p < .62f) 1 else 0
+                }
+            }
+            val g = nebGlass(k, light)
+            hx[k] = Float.fromBits((g ushr 32).toInt()); hy[k] = Float.fromBits(g.toInt())
+            col[k] = c.toByte(); hash[k] = rng.next()
+            k++
+        }
+        return k
+    }
+
+    /** Nebulosa: the room's light changed. The grain is carried to its new arms by the spring. Returns true if anything moves. */
+    fun setLight(t: Float): Boolean {
+        if (style != Style.NEBULOSA) return false
+        val nt = t.coerceIn(0f, 1f)
+        if (abs(nt - light) < .04f) return false
+        light = nt
+        for (i in 0 until n) {
+            val g = nebGlass(i, nt)
+            val gx0 = Float.fromBits((g ushr 32).toInt()); val gy0 = Float.fromBits(g.toInt())
+            val x = sx(gx0, gy0); val y = sy(gx0, gy0)
+            ox[i] += hx[i] - x; oy[i] += hy[i] - y
+            hx[i] = x; hy[i] = y
+        }
+        return true
+    }
+
+    // ---- Delta: a channel for each charge of the week, carved out from the hinge ----
+    private fun genDelta(): Int {
+        val cell = 3f * dp
+        val cw = (gw / cell).toInt() + 1; val ch = (gh / cell).toInt() + 1
+        // Distance from each cell to the nearest channel's bank: negative in the water
+        val dist = FloatArray(cw * ch) { 1e9f }
+        val fresh = BooleanArray(cw * ch)
+        val m = charges.size / 3
+        var newest = -1
+        for (j in 0 until m) if (newest < 0 || charges[3 * j] < charges[3 * newest]) newest = j
+        val stack = ArrayList<FloatArray>()
+        for (j in 0 until m) {
+            val age = charges[3 * j]; val gain = charges[3 * j + 1]
+            val rng = Rng(charges[3 * j + 2].toInt().coerceAtLeast(1))
+            val silt = (1f - .55f * age / 7f).coerceIn(.3f, 1f)
+            val w0 = (1.4f + 7.5f * gain) * dp * silt
+            val axis = if (cover || rng.next() < .5f) 0f else 3.1416f
+            stack.clear()
+            stack += floatArrayOf(gcx + (if (axis == 0f) 1f else -1f) * dp, gcy + (rng.next() - .5f) * gh * .55f, axis + (rng.next() - .5f) * .7f, w0, 0f)
+            val isNew = j == newest
+            var budget = 4000
+            while (stack.isNotEmpty() && budget > 0) {
+                val b = stack.removeAt(stack.size - 1)
+                var x = b[0]; var y = b[1]; var a = b[2]; var wd = b[3]; val depth = b[4].toInt()
+                while (budget-- > 0) {
+                    x += cos(a) * 2f * dp; y += sin(a) * 2f * dp
+                    if (x < 0f || y < 0f || x >= gw || y >= gh) break
+                    // Meanders, drawn back towards the way away from the hinge
+                    a += (rng.next() - .5f) * .24f + kotlin.math.atan2(sin(axis - a), cos(axis - a)) * .025f
+                    // Stamp the channel and its banks into the field
+                    val reach = wd + 5f * dp
+                    val i0 = ((x - reach) / cell).toInt().coerceAtLeast(0); val i1 = ((x + reach) / cell).toInt().coerceAtMost(cw - 1)
+                    val j0 = ((y - reach) / cell).toInt().coerceAtLeast(0); val j1 = ((y + reach) / cell).toInt().coerceAtMost(ch - 1)
+                    for (jj in j0..j1) for (ii in i0..i1) {
+                        val dd = hypot((ii + .5f) * cell - x, (jj + .5f) * cell - y) - wd
+                        val q = jj * cw + ii
+                        if (dd < dist[q]) { dist[q] = dd; fresh[q] = isNew }
+                    }
+                    // Distributaries split off, narrower
+                    if (depth < 4 && rng.next() < .016f) {
+                        val sgn = if (rng.next() < .5f) 1f else -1f
+                        stack += floatArrayOf(x, y, a + .5f * sgn, wd * .72f, depth + 1f)
+                        a -= .2f * sgn; wd *= .86f
+                    }
+                }
+            }
+        }
+        val rng = Rng(97)
+        var k = 0; var guard = 0
+        val bank = 2.6f * dp
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * gw; val y = rng.next() * gh
+            val q = (y / cell).toInt().coerceIn(0, ch - 1) * cw + (x / cell).toInt().coerceIn(0, cw - 1)
+            val d = dist[q]
+            if (d < 0f) continue
+            val dens: Float; val c: Int
+            if (d < bank) { dens = .95f; c = if (fresh[q]) 1 else 0 }
+            else {
+                // The sandbars between: faint bars laid along the flow
+                dens = .26f + .16f * (.5f + .5f * sin(y / (9f * dp) + abs(x - gcx) / (37f * dp)))
+                c = if (rng.next() < .22f) 0 else 2
             }
             if (rng.next() > dens) continue
             hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()

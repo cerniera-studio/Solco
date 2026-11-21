@@ -10,6 +10,16 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 **Tronco.** Tree rings. One ring a day from the day Solco is first set, as wide as that day's unfolded use: pale early grain, then a dense line where the day closed. Today's ring is still growing. On the first day there is only a core.
 
+**Marea.** The grain fills to the battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still.
+
+**Duna.** Wind ripples blowing out from the hinge. Tilt past the angle of repose and the loosest grain slides downhill; level the phone and the wind blows it home.
+
+**Polvere.** Dust hangs in a shaft of light falling from the sun or moon. The longer the phone lies untouched, the more has settled to the floor; picking it up lifts it back into the light. With the moon set there is no shaft. The shaft is laid again as the sun moves on.
+
+**Nebulosa.** Two arms of grain wound round the hinge, read from the room's light sensor while visible: in a bright room they open wide and loose, in the dark they wind close about the core. The grain is carried, not redrawn, when the light changes.
+
+**Delta.** Each charge of the past week carves a channel out from the hinge, as deep as the charge gave. The oldest silt up; the newest channel's banks wear the finish's accent. The plug is heard for as long as Solco is set, two broadcasts a charge. With no charges yet the sand is flat.
+
 ## In every style
 
 - **The disc** is the sun by day and the moon by night, riding a ring round the hinge: low at dawn and dusk, highest at noon. Cooler and brighter by day, warmer and dimmer at night.
@@ -19,7 +29,9 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 ## Finishes
 
-Visconti (green-black, champagne and ivory grain), Avorio (bone, ink and oxide grain, a rosso sun), Carbonio (black, ivory and rosso grain), Rosso (oxblood, champagne grain).
+Visconti (green-black, champagne and ivory grain), Carbonio (black, ivory and rosso grain), Notte (midnight navy, ivory, champagne and slate grain), Tabacco (tobacco brown, cream, ochre and umber grain), Grafite (graphite, silver and smoke grain), Bronzo (warm black, bronze, copper and pale-gold grain) and Verderame (deep petrol, verdigris grain with copper: the patina to Bronzo's metal).
+
+Seven styles and seven finishes, so a different pairing can be worn each day.
 
 ## Battery
 
@@ -57,6 +69,7 @@ At the foot of Settings: whether the wallpaper has drawn on the cover screen and
 | `SolcoRenderer.kt` | Draws with the GPU: ground and grooves, grain as points, the disc |
 | `SolcoWallpaperService.java` | The wallpaper host. Fold detection, hinge sensor, touch, the minute |
 | `Watch.kt` | The fold as the wallpaper sees it, Tronco's daily record, diagnostics |
+| `Charges.kt` | Delta's record: each charge of the week, when it began and what it gave |
 | `Painters.kt` | Ground and grooves, the sun and moon, and the Canvas painter for Settings |
 | `Look.kt` | Finishes, styles, saved choices |
 | `SettingsActivity.kt`, `Views.kt`, `Kit.kt` | Settings in the family's kit |

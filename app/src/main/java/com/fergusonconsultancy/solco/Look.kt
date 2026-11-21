@@ -8,7 +8,9 @@ import android.graphics.Color
 /**
  * A finish: the ground, the fine grooves, three grain colours, and the disc by day and by night.
  * Colours are 0xRRGGBB. Visconti keeps the Fold family's palette; Carbonio is taken from the stipple prints
- * Solco began from; Notte, Tabacco, Grafite and Bronzo are its darker companions.
+ * Solco began from; Notte, Tabacco, Grafite and Bronzo are its darker companions. Verderame (21 Nov 2026)
+ * is the only cool, saturated one: copper's own patina, the grain itself verdigris, so it sits apart from
+ * the ivory-grained six while pairing with Bronzo's copper.
  */
 enum class Finish(
     val title: String,
@@ -29,6 +31,8 @@ enum class Finish(
     TABACCO("Tabacco", 0x1C140E, 0xE6D4B0, 0.09f, intArrayOf(0xE6D6B4, 0xC28C44, 0x7E5C3C), 0.76f, 0xF2E2C2, 0xCC9A58, 0x1C140E, false),
     GRAFITE("Grafite", 0x18191B, 0xC8CCD2, 0.08f, intArrayOf(0xD4D7DC, 0x8C9096, 0x55595F), 0.74f, 0xE8EAEC, 0xB4B8BE, 0x18191B, false),
     BRONZO("Bronzo", 0x0D0B09, 0xC8894A, 0.09f, intArrayOf(0xD69C5E, 0xB4683A, 0xEAD4A8), 0.78f, 0xF2CC96, 0xB97C46, 0x0D0B09, false),
+    // 21 Nov 2026: a seventh, so a style and a finish can be chosen for each day of the week
+    VERDERAME("Verderame", 0x0A1F20, 0x9CC9B8, 0.09f, intArrayOf(0xA9CFC0, 0xC98A5A, 0x4F8676), 0.76f, 0xE4EFE9, 0xC99A6A, 0x0A1F20, false),
 }
 
 /** A style is a different force acting on the grain. Each says what puts it where it is. */
@@ -37,6 +41,9 @@ enum class Style(val title: String, val note: String) {
     TRONCO("Tronco", "One ring a day, as wide as that day’s unfolded use: pale early grain, then a dense line where the day closed. The trunk begins as a core on the day you set it."),
     MAREA("Marea", "The grain fills to your battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still."),
     DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain slides downhill; level the phone and the wind blows it home."),
+    POLVERE("Polvere", "Dust hangs in a shaft of light from the sun or moon. The longer the phone lies untouched, the more of it has settled to the floor; picking it up lifts it back into the light."),
+    NEBULOSA("Nebulosa", "Two arms of grain wound round the hinge. The room's light sets how tightly: in a bright room they open wide and loose, in the dark they wind close about the core."),
+    DELTA("Delta", "Each charge carves a channel out from the hinge, as deep as the charge was long. Over a week they braid a delta, the oldest silting up; the newest channel's banks wear the accent."),
 }
 
 /**
