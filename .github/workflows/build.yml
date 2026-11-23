@@ -60,7 +60,7 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: Solco build ${{ github.run_number }}
+          name: Solco build ${{ github.run_number }}${{ github.ref != 'refs/heads/main' && format(' ({0})', github.ref_name) || '' }}
           # Builds from a branch are kept as pre-releases (for their screenshots), so the latest release is always main's
           prerelease: ${{ github.ref != 'refs/heads/main' }}
           files: Solco.apk
@@ -100,6 +100,11 @@ jobs:
             shot-*.png
             app-log.txt
             shapes.txt
+
+      # An empty file (a log the run never wrote to) makes GitHub refuse the whole upload
+      - name: Drop empty files before attaching
+        if: always()
+        run: find . -maxdepth 1 -type f \( -name 'shot-*.png' -o -name 'app-log.txt' -o -name 'shapes.txt' \) -size 0 -print -delete
 
       - name: Attach screenshots to the release
         if: always()
