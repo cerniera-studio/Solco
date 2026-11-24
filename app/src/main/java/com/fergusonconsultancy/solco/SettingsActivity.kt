@@ -96,7 +96,7 @@ class SettingsActivity : Activity() {
                 styleTiles += s to t
                 styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
             }
-            // Seven styles: the last stands alone at a tile's width, not stretched across the row
+            // Nine styles: the last stands alone at a tile's width, not stretched across the row
             if (pair.size < 2) styleRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = px(12) })
             screen.add(styleRow, if (r > 0) px(14) else 0)
         }
@@ -279,7 +279,7 @@ class SettingsActivity : Activity() {
             "The monolithic membrane" to "The grain is one body: a finger pushes the grain under it, and the grain around it yields and follows, then everything springs home.",
             "Concentrato" to "A fast fold leaves the bands emptier for a moment, so only the swing's trajectory reads; they fill back in as the grain settles.",
             "Giulietta" to "Nothing on the wallpaper is a control. The sun or moon, the battery's tide and the day's ring are read from the grain itself.",
-            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery, a tilt, the room's light or picking the phone up moves something.",
+            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery, a tilt, the weather or picking the phone up moves something.",
         )
     }
 }

@@ -72,7 +72,12 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         val (lvl, chg) = Power.read(context)
         val sky = Sky.now(Prefs.notturno(context), Notturno.previewAt)
         val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
-            sky = sky, light = light, charges = if (style == Style.DELTA) Charges.channels(context) else FloatArray(0))
+            sky = sky, charges = if (style == Style.DELTA) Charges.channels(context) else FloatArray(0),
+            weather = if (style == Style.PIOGGIA) Weather.now(context) else null,
+            season = if (style == Style.STAGIONE) Seasons.now() else null,
+            trail = if (style == Style.SENTIERO) Trail.points(context, FoldWatch.tall(width, height)) else FloatArray(0))
+        // Pioggia: a fresh reading if one is due, then the rain as it is now
+        if (style == Style.PIOGGIA && Weather.due(context)) Weather.fetch(context) { post { if (Prefs.style(context) == Style.PIOGGIA) rebuild() } }
         back?.recycle(); disc?.recycle(); spark?.recycle()
         back = Backdrop.paint(s, finish)
         dpos = s.disc(sky)
@@ -88,29 +93,6 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         // Polvere: as if picked up after a while lying still, so the lift can be seen here
         scene?.settle(.6f)
         invalidate()
-    }
-
-    /** Nebulosa: the room's light, read while the preview is on screen, as the wallpaper does. */
-    private var light = .5f
-    private val lightListener = object : android.hardware.SensorEventListener {
-        override fun onSensorChanged(e: android.hardware.SensorEvent) {
-            val t = Math.round(Lumen.of(e.values[0]) * 16f) / 16f
-            if (t == light) return
-            light = t
-            if (scene?.setLight(t) == true) invalidate()
-        }
-        override fun onAccuracyChanged(s: android.hardware.Sensor?, a: Int) {}
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        val sm = context.getSystemService(android.hardware.SensorManager::class.java) ?: return
-        sm.getDefaultSensor(android.hardware.Sensor.TYPE_LIGHT)?.let { sm.registerListener(lightListener, it, android.hardware.SensorManager.SENSOR_DELAY_NORMAL) }
-    }
-
-    override fun onDetachedFromWindow() {
-        context.getSystemService(android.hardware.SensorManager::class.java)?.unregisterListener(lightListener)
-        super.onDetachedFromWindow()
     }
 
     /** Plays a fast fold with Concentrato as chosen, so it can be seen without flicking the phone. */
@@ -187,7 +169,11 @@ fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) 
     val rings = if (style == Style.TRONCO) Growth.sample(30) else FloatArray(0)
     val sky = Sky.now(Prefs.notturno(c), Notturno.previewAt)
     val s = Scene(w, h, dp, style, rings, coverOverride = true, level = Power.read(c).first,
-        sky = sky, light = .45f, charges = if (style == Style.DELTA) Charges.sample() else FloatArray(0))
+        sky = sky, charges = if (style == Style.DELTA) Charges.sample() else FloatArray(0),
+        // The tiles show a plausible case of each force, as Delta's shows a sample week
+        weather = if (style == Style.PIOGGIA) Wx.SAMPLE else null,
+        season = if (style == Style.STAGIONE) Seasons.now() else null,
+        trail = if (style == Style.SENTIERO) Trail.sample() else FloatArray(0))
     // Polvere's tile shows some dust on the floor, as after a while lying still
     s.settle(.4f)
     val back = Backdrop.paint(s, f)

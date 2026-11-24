@@ -136,29 +136,22 @@ public class SolcoWallpaperService extends WallpaperService {
             if (on) {
                 gravity = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY);
                 if (gravity == null) gravity = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-                if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_UI);
+                if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_GAME);
             } else if (gravity != null) {
                 sensors.unregisterListener(this, gravity);
                 lastGx = 99f; lastGy = 99f;
             }
         }
 
-        /** Nebulosa reads the room's light only while it is on screen; nothing else does. */
-        private Sensor lightSensor;
-        private boolean lighting;
-        private float lastLight = -1f;
-
-        private void lightSensor(boolean on) {
-            on = on && sensors != null && Prefs.INSTANCE.style(SolcoWallpaperService.this) == Style.NEBULOSA;
-            if (on == lighting) return;
-            lighting = on;
-            if (on) {
-                lightSensor = sensors.getDefaultSensor(Sensor.TYPE_LIGHT);
-                if (lightSensor != null) sensors.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
-            } else if (lightSensor != null) {
-                sensors.unregisterListener(this, lightSensor);
-                lastLight = -1f;
-            }
+        /** Pioggia: asks for the weather while it is on screen, at most every 20 minutes (see [Weather]). */
+        private void weather() {
+            Context c = SolcoWallpaperService.this;
+            if (view == null || !visible || Prefs.INSTANCE.style(c) != Style.PIOGGIA || !Weather.INSTANCE.due(c)) return;
+            Weather.INSTANCE.fetch(c, changed -> {
+                GLView v = view;
+                if (v != null) { v.queueEvent(() -> renderer.refresh()); v.requestRender(); }
+                return kotlin.Unit.INSTANCE;
+            });
         }
 
         private final BroadcastReceiver clock = new BroadcastReceiver() {
@@ -167,6 +160,7 @@ public class SolcoWallpaperService extends WallpaperService {
                 if (view == null) return;
                 view.queueEvent(() -> renderer.refresh());
                 view.requestRender();
+                weather();
             }
         };
 
@@ -258,8 +252,11 @@ public class SolcoWallpaperService extends WallpaperService {
                 listen(true);
                 view.queueEvent(() -> renderer.refresh());
                 arrive();
+                weather();
             } else {
                 hiddenAt = android.os.SystemClock.elapsedRealtime();
+                // Sentiero's trail, written once on the way out of sight rather than on every touch
+                Trail.INSTANCE.save(SolcoWallpaperService.this);
                 listen(false);
                 view.onPause();
             }
@@ -282,7 +279,6 @@ public class SolcoWallpaperService extends WallpaperService {
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION), Context.RECEIVER_EXPORTED);
                 else c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION));
                 tiltSensor(true);
-                lightSensor(true);
             } else {
                 try {
                     c.unregisterReceiver(clock);
@@ -297,24 +293,12 @@ public class SolcoWallpaperService extends WallpaperService {
                 } catch (IllegalArgumentException ignored) {
                 }
                 tiltSensor(false);
-                lightSensor(false);
             }
         }
 
         @Override
         public void onSensorChanged(SensorEvent e) {
             int type = e.sensor.getType();
-            if (type == Sensor.TYPE_LIGHT) {
-                if (view == null || e.values.length < 1) return;
-                // Lux on a log scale, dark (under 1 lux) to bright (a lit room by a window, 1,000 lux and up),
-                // in sixteen steps so the sensor's flicker never stirs the grain
-                final float t = Math.round(Lumen.of(e.values[0]) * 16f) / 16f;
-                if (t == lastLight) return;
-                lastLight = t;
-                view.queueEvent(() -> renderer.light(t));
-                view.requestRender();
-                return;
-            }
             if (type == Sensor.TYPE_GRAVITY || type == Sensor.TYPE_ACCELEROMETER) {
                 if (view == null || e.values.length < 2) return;
                 // Gravity across the screen: device x to the right, device y up, so screen y is flipped;
@@ -327,7 +311,8 @@ public class SolcoWallpaperService extends WallpaperService {
                     case 3: gx = -ay; gy = ax; break;
                     default: gx = -ax; gy = ay;
                 }
-                if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.35f) return;
+                // Fine steps (under a degree), which the grain then eases between, so the slide never lurches
+                if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.15f) return;
                 lastGx = gx; lastGy = gy;
                 view.queueEvent(() -> renderer.tilt(gx, gy));
                 view.requestRender();
@@ -354,7 +339,8 @@ public class SolcoWallpaperService extends WallpaperService {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences p, String key) {
             if (!Prefs.isLook(key) || view == null) return;
-            if (visible) { tiltSensor(false); tiltSensor(true); lightSensor(false); lightSensor(true); }
+            if (visible) { tiltSensor(false); tiltSensor(true); }
+            weather();
             view.queueEvent(() -> renderer.rebuild());
             view.requestRender();
             notifyColorsChanged();
@@ -368,6 +354,7 @@ public class SolcoWallpaperService extends WallpaperService {
         @Override
         public void onDestroy() {
             Prefs.of(SolcoWallpaperService.this).unregisterOnSharedPreferenceChangeListener(this);
+            Trail.INSTANCE.save(SolcoWallpaperService.this);
             listen(false);
             if (sensors != null) sensors.unregisterListener(this);
             FoldWatch.unlisten();

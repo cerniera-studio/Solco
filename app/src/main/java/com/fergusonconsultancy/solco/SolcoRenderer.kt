@@ -87,6 +87,11 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         dirtySky = true
         val s = scene ?: return
         if (s.style == Style.TRONCO && (LocalDate.now() != builtDay || SystemClock.elapsedRealtime() - builtAt > 15 * 60_000L)) dirtyBuild = true
+        // Stagione moves on a day at midnight; Sentiero is raked again then, and relaid as the trail grows
+        if ((s.style == Style.STAGIONE || s.style == Style.SENTIERO) && LocalDate.now() != builtDay) dirtyBuild = true
+        if (s.style == Style.SENTIERO && Trail.version != builtTrail && !tracking) dirtyBuild = true
+        // Pioggia: a new reading of the weather
+        if (s.style == Style.PIOGGIA && (Weather.now(ctx)?.at ?: 0L) != builtWx) dirtyBuild = true
         // Delta's channels silt up as they age: carved again once an hour at most
         if (s.style == Style.DELTA && SystemClock.elapsedRealtime() - builtAt > 60 * 60_000L) dirtyBuild = true
     }
@@ -96,7 +101,29 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     /** The display's rotation, set by the engine before a new size arrives, so a turned screen lays out the right way. */
     @Volatile var rotation = 0
 
-    fun touch(x: Float, y: Float, down: Boolean) { scene?.touch(x, y, down) }
+    /** Sentiero: whether a finger is down, where it was last kept, and whether it has become a swipe. */
+    private var tracking = false
+    private var swiped = false
+    private var lastTx = 0f
+    private var lastTy = 0f
+
+    fun touch(x: Float, y: Float, down: Boolean) {
+        val s = scene
+        s?.touch(x, y, down)
+        // Sentiero keeps where the finger went down, and a swipe's path every 16 dp
+        if (s == null || s.style != Style.SENTIERO || !down) { tracking = false; return }
+        val f = s.glassFrac(x, y)
+        if (!tracking) {
+            tracking = true; swiped = false; lastTx = x; lastTy = y
+            Trail.add(ctx, s.cover, f[0], f[1], 0)
+            return
+        }
+        if (kotlin.math.hypot(x - lastTx, y - lastTy) >= 16f * s.dp) {
+            if (!swiped) { Trail.becomeStroke(s.cover); swiped = true }
+            Trail.add(ctx, s.cover, f[0], f[1], 2)
+            lastTx = x; lastTy = y
+        }
+    }
 
     @Volatile private var builtLevel = -1f
     @Volatile private var builtCharging = false
@@ -120,9 +147,9 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     /** The tilt changed (Duna). Screen axes, y down. */
     fun tilt(x: Float, y: Float) { scene?.tilt(x, y) }
 
-    /** Nebulosa: the room's light, 0 to 1, kept for the next build and handed to the grain now. */
-    @Volatile private var light = .5f
-    fun light(t: Float) { light = t; scene?.setLight(t) }
+    /** What the last build was laid from: Pioggia's reading and Sentiero's trail. */
+    @Volatile private var builtWx = 0L
+    @Volatile private var builtTrail = -1
 
     /** Polvere: how long the phone lay untouched, applied once the grain for this screen is in place. */
     private var pendingRest = 0L
@@ -154,9 +181,14 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val (lvl, chg) = Power.read(ctx)
                 builtLevel = lvl
                 builtCharging = chg
+                val wx = if (style == Style.PIOGGIA) Weather.now(ctx) else null
+                builtWx = wx?.at ?: 0L
+                builtTrail = Trail.version
                 val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
-                    sky = if (style == Style.POLVERE) Sky.now(Prefs.notturno(ctx)) else null, light = light,
-                    charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0))
+                    sky = if (style == Style.POLVERE) Sky.now(Prefs.notturno(ctx)) else null,
+                    charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0),
+                    weather = wx, season = if (style == Style.STAGIONE) Seasons.now() else null,
+                    trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0))
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
                     val c = f.grain[sc.col[i].toInt()]
