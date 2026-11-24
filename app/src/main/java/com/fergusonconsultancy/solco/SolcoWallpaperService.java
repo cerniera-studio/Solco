@@ -136,7 +136,7 @@ public class SolcoWallpaperService extends WallpaperService {
             if (on) {
                 gravity = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY);
                 if (gravity == null) gravity = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-                if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_UI);
+                if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_GAME);
             } else if (gravity != null) {
                 sensors.unregisterListener(this, gravity);
                 lastGx = 99f; lastGy = 99f;
@@ -327,7 +327,8 @@ public class SolcoWallpaperService extends WallpaperService {
                     case 3: gx = -ay; gy = ax; break;
                     default: gx = -ax; gy = ay;
                 }
-                if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.35f) return;
+                // Fine steps (under a degree), which the grain then eases between, so the slide never lurches
+                if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.15f) return;
                 lastGx = gx; lastGy = gy;
                 view.queueEvent(() -> renderer.tilt(gx, gy));
                 view.requestRender();

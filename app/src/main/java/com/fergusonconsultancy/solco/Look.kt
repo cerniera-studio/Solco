@@ -40,7 +40,7 @@ enum class Style(val title: String, val note: String) {
     SOLCO("Solco", "Rings centred on the hinge. Folding stirs the grain along the swing; a fast fold leaves the bands emptier."),
     TRONCO("Tronco", "One ring a day, as wide as that day’s unfolded use: pale early grain, then a dense line where the day closed. The trunk begins as a core on the day you set it."),
     MAREA("Marea", "The grain fills to your battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still."),
-    DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain slides downhill; level the phone and the wind blows it home."),
+    DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain runs downhill and heaps in the corner, as much as came; turn the phone and the heap pours round; level it and the wind blows it home."),
     POLVERE("Polvere", "Dust hangs in a shaft of light from the sun or moon. The longer the phone lies untouched, the more of it has settled to the floor; picking it up lifts it back into the light."),
     NEBULOSA("Nebulosa", "Two arms of grain wound round the hinge. The room's light sets how tightly: in a bright room they open wide and loose, in the dark they wind close about the core."),
     DELTA("Delta", "Each charge carves a channel out from the hinge, as deep as the charge was long. Over a week they braid a delta, the oldest silting up; the newest channel's banks wear the accent."),
