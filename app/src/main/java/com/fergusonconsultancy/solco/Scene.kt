@@ -35,8 +35,12 @@ class Scene(
     rotation: Int = 0,
     /** Polvere: the sky the shaft of light falls from. Without one, or with the moon set, there is no shaft. */
     sky: SkyState? = null,
-    /** Nebulosa: the room's light, 0 dark to 1 bright, which sets how tightly the arms wind. */
-    light: Float = .5f,
+    /** Pioggia: the weather outside now; without it, an overcast haze. */
+    private val weather: Wx? = null,
+    /** Stagione: the year's daylight here, one value a day, and today. */
+    private val season: Season? = null,
+    /** Sentiero: today's touches on this screen, as fractions of the upright glass (see [Trail]). */
+    private val trail: FloatArray = FloatArray(0),
     /** Delta: each charge of the week as age in days, gain and seed (see [Charges]). */
     private val charges: FloatArray = FloatArray(0),
 ) {
@@ -47,7 +51,7 @@ class Scene(
      * surface is a turned one; the display's rotation says which way. Tiles are never turned.
      */
     val quarter: Int = if (coverOverride != null || w <= h) 0 else if (rotation == 3) 3 else 1
-    private val turned = quarter != 0 && style != Style.MAREA && style != Style.POLVERE
+    private val turned = quarter != 0 && style != Style.MAREA && style != Style.POLVERE && style != Style.PIOGGIA
     /** The glass's own upright size, in which the hinge styles are laid out before turning. */
     private val gw: Int = if (turned) h else w
     private val gh: Int = if (turned) w else h
@@ -87,39 +91,18 @@ class Scene(
     private val airborne = BooleanArray(if (style == Style.POLVERE) cap else 0)
     private val floorY = h * .955f
 
-    /** Nebulosa: each grain's place in the galaxy, independent of how tightly it is wound. */
-    private val na = FloatArray(if (style == Style.NEBULOSA) cap else 0)
-    private val nb = FloatArray(if (style == Style.NEBULOSA) cap else 0)
-    private val nc = FloatArray(if (style == Style.NEBULOSA) cap else 0)
-    var light: Float = light.coerceIn(0f, 1f)
-        private set
-    /**
-     * Nebulosa moves as a fluid, not a wheel (21 Nov 2026): each grain keeps its home and its
-     * displacement in polar terms about the core, and returns along the swirl. The inner grain turns
-     * fast and the outer lags behind it, as in a whirlpool, so the arms shear and feather rather than
-     * turning as one rigid disc.
-     */
-    private val nbs = if (style == Style.NEBULOSA) cap else 0
-    private val pRh = FloatArray(nbs); private val pTh = FloatArray(nbs)
-    private val dRh = FloatArray(nbs); private val dTh = FloatArray(nbs)
-    private val wRh = FloatArray(nbs); private val wTh = FloatArray(nbs)
-
     val n: Int = when (style) {
         Style.SOLCO -> genSolco()
         Style.TRONCO -> genTronco()
         Style.MAREA -> genMarea()
         Style.DUNA -> genDuna()
         Style.POLVERE -> genPolvere()
-        Style.NEBULOSA -> genNebulosa()
         Style.DELTA -> genDelta()
+        Style.PIOGGIA -> genPioggia()
+        Style.STAGIONE -> genStagione()
+        Style.SENTIERO -> genSentiero()
     }.also { k ->
         if (turned) for (i in 0 until k) { val x = hx[i]; val y = hy[i]; hx[i] = sx(x, y); hy[i] = sy(x, y) }
-    }
-
-    init {
-        if (style == Style.NEBULOSA) for (i in 0 until n) {
-            pRh[i] = hypot(hx[i] - cx, hy[i] - cy); pTh[i] = kotlin.math.atan2(hy[i] - cy, hx[i] - cx)
-        }
     }
 
     // ---- Marea: grain filled to the battery level, foam at the surface, sediment at the floor ----
@@ -546,88 +529,270 @@ class Scene(
         }
     }
 
-    // ---- Nebulosa: two arms wound round the hinge, tighter as the room darkens ----
-    private val nebR: Float get() = r * .92f
-
-    /** Where grain [i] sits at light [t], on the upright glass. */
-    private fun nebGlass(i: Int, t: Float): Long {
-        val big = nebR
-        val x: Float; val y: Float
-        when {
-            na[i] >= 0f -> {
-                val rho = big * (.05f + .90f * na[i])
-                val wind = 2.6f - 1.3f * t
-                val th = nc[i] + wind * kotlin.math.ln(rho / (big * .05f))
-                val spread = (big * .008f + rho * .07f) * (.75f + .45f * t)
-                x = gcx + cos(th) * rho - sin(th) * nb[i] * spread
-                y = gcy + sin(th) * rho + cos(th) * nb[i] * spread
-            }
-            na[i] > -1.5f -> {
-                val sig = big * (.030f + .03f * t)
-                x = gcx + nb[i] * sig; y = gcy + nc[i] * sig
-            }
-            else -> { x = nb[i] * gw; y = nc[i] * gh }
-        }
-        return (x.toBits().toLong() shl 32) or (y.toBits().toLong() and 0xFFFFFFFFL)
-    }
-
-    private fun gauss(rng: Rng): Float {
-        val u = rng.next().coerceAtLeast(1e-6f); val v = rng.next()
-        return sqrt(-2f * kotlin.math.ln(u)) * cos(6.2832f * v)
-    }
-
-    private fun genNebulosa(): Int {
-        val rng = Rng(83)
-        val total = (cap * .62f).toInt()
+    // ---- Pioggia: the weather outside, drawn as a long exposure ----
+    /**
+     * Pioggia (24 Nov 2026). The rain falling now where the phone is, as a long-exposure photograph
+     * draws it: still streaks, slanted by the real wind and as long as the rain is hard. Drizzle is
+     * fine and sparse, a downpour dense; snow lies as soft clumps blown further by the same wind; a
+     * dry sky is a haze as heavy as its cloud, thickest at the top. Where drops land, rings on the
+     * floor. In a thunderstorm, one fork in the accent. Laid out by gravity, like Marea, so the rain
+     * falls down the view whichever way the phone is held; east is to the right, as on a map.
+     */
+    private fun genPioggia(): Int {
+        val wx = weather ?: Wx.OVERCAST
+        val rng = Rng(113)
+        // As much weather per square dp on every screen as on the cover, which it was judged on
+        val area = (w / dp) * (h / dp) / 395_000f
         var k = 0
-        while (k < total) {
-            val u = rng.next()
-            val c: Int
-            when {
-                u < .11f -> { na[k] = -1f; nb[k] = gauss(rng); nc[k] = gauss(rng); c = 0 }
-                u < .19f -> { na[k] = -2f; nb[k] = rng.next(); nc[k] = rng.next(); c = 2 }
-                else -> {
-                    val a = rng.next().pow(1.35f)
-                    na[k] = a; nb[k] = gauss(rng); nc[k] = (if (rng.next() < .5f) 0f else 3.1416f) + (rng.next() - .5f) * .25f
-                    val p = rng.next()
-                    c = if (a < .3f) (if (p < .75f) 0 else 1) else if (p < .45f) 2 else if (p < .62f) 1 else 0
+        fun put(x: Float, y: Float, c: Int): Boolean {
+            if (k >= cap) return false
+            if (x < 0f || y < 0f || x >= w || y >= h) return true
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next(); k++
+            return true
+        }
+        // Cloud: a haze as heavy as the cover, heaviest at the top, as overcast is
+        val haze = (cap * .10f * wx.cloud / 100f).toInt()
+        repeat(haze) { put(rng.next() * w, rng.next().pow(1.8f) * h, 2) }
+        // Fog lies in level bands across the view
+        if (wx.code == 45 || wx.code == 48) {
+            val bands = (cap * .12f).toInt()
+            repeat(bands) {
+                val y = rng.next() * h
+                val b = .5f + .5f * sin(y / (38f * dp))
+                if (rng.next() < b * b) put(rng.next() * w, y, if (rng.next() < .3f) 0 else 2)
+            }
+        }
+        val snowy = wx.snow > 0f || wx.code in 71..77 || wx.code == 85 || wx.code == 86
+        val wet = wx.precip + wx.snow * 7f
+        val inten = if (wet > 0f) (kotlin.math.ln(1f + wet) / kotlin.math.ln(11f)).coerceIn(.08f, 1f) else 0f
+        if (inten > 0f) {
+            // Rain falls about 6 m/s and snow about 1, so the same wind lays snow far flatter
+            val east = -sin(Math.toRadians(wx.dir.toDouble())).toFloat()
+            val drift = east * wx.wind / (if (snowy) 1f else 6f)
+            val ang = kotlin.math.atan2(1f, drift)
+            val ux = cos(ang); val uy = sin(ang)
+            val streaks = ((260f + 2600f * inten) * area).toInt()
+            for (s in 0 until streaks) {
+                val x0 = rng.next() * w * 1.5f - w * .25f; val y0 = rng.next() * h
+                if (snowy) {
+                    // A flake: a soft clump, not a streak
+                    val m = 4 + (rng.next() * 4).toInt()
+                    repeat(m) { if (!put(x0 + (rng.next() - .5f) * 3f * dp, y0 + (rng.next() - .5f) * 3f * dp, 0)) return k }
+                    continue
+                }
+                val len = (10f + 26f * inten * (.5f + rng.next())) * dp
+                val steps = (len / (1.1f * dp)).toInt()
+                val c = if (rng.next() < .75f) 0 else 2
+                for (j in 0 until steps) {
+                    if (rng.next() > .8f) continue
+                    val t = j / steps.toFloat()
+                    if (!put(x0 + ux * len * t, y0 + uy * len * t, c)) return k
                 }
             }
-            val g = nebGlass(k, light)
-            hx[k] = Float.fromBits((g ushr 32).toInt()); hy[k] = Float.fromBits(g.toInt())
-            col[k] = c.toByte(); hash[k] = rng.next()
+            // Snow lies: a soft drift along the floor, deeper the harder it falls
+            if (snowy) {
+                val deep = (8f + 30f * inten) * dp
+                val n0 = (cap * .05f * inten).toInt()
+                repeat(n0) {
+                    val x = rng.next() * w
+                    val top = h - deep * (.7f + .3f * sin(x / (57f * dp)) + .15f * sin(x / (13f * dp)))
+                    val y = top + rng.next().pow(.6f) * (h - top)
+                    if (!put(x, y, if (rng.next() < .8f) 0 else 2)) return k
+                }
+            }
+            // The floor: rings where the drops land, more the harder it falls
+            if (!snowy) {
+                val rings = ((30f + 160f * inten) * area).toInt()
+                val floor = h * .93f
+                repeat(rings) {
+                    val x0 = rng.next() * w; val y0 = floor + rng.next() * (h - floor)
+                    val rad = (3f + 9f * rng.next()) * dp
+                    val m = (rad * 2.2f / dp).toInt().coerceAtLeast(6)
+                    for (j in 0 until m) {
+                        val a = 6.2832f * j / m
+                        if (!put(x0 + cos(a) * rad, y0 + sin(a) * rad * .32f, if (rng.next() < .5f) 2 else 0)) return k
+                    }
+                }
+            }
+        }
+        // A thunderstorm: one fork of lightning in the accent
+        if (wx.code >= 95) {
+            var x = w * (.3f + .4f * rng.next()); var y = 0f
+            while (y < h * .7f) {
+                val nx = x + (rng.next() - .5f) * 60f * dp; val ny = y + (20f + 30f * rng.next()) * dp
+                for (j in 0 until 40) { val t = j / 40f; if (!put(x + (nx - x) * t, y + (ny - y) * t, 1)) return k }
+                x = nx; y = ny
+            }
+        }
+        return k
+    }
+
+    // ---- Stagione: the year's daylight, one ray a day, fanned from the hinge ----
+    /**
+     * Stagione (24 Nov 2026). One ray for each day of the year, fanned from the hinge, as long as
+     * that day's daylight here: the fan swells to midsummer and pinches at the winter solstice. On
+     * the cover the year runs top to bottom round the hinge on the left edge; on the main screen it
+     * goes once round the crease, January at the top. Days gone are dense, days to come faint, today's
+     * ray is the accent; a hair of bare sand marks each month. Each ray reaches its share of the way
+     * to the edge of the glass, so the year fills the screen whatever its shape.
+     */
+    private fun genStagione(): Int {
+        val se = season ?: Season.EVEN
+        val days = se.daylight
+        val nd = days.size.coerceAtLeast(1)
+        var most = 0f
+        for (d in days) if (d > most) most = d
+        if (most <= 0f) most = 1f
+        val span = if (cover) 3.1416f else 6.2832f
+        val a0 = -1.5708f
+        val inner = 14f * dp
+        val rng = Rng(101)
+        var k = 0; var guard = 0
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * gw; val y = rng.next() * gh
+            val dx = x - gcx; val dy = y - gcy
+            val rr = hypot(dx, dy)
+            if (rr < inner) continue
+            var a = kotlin.math.atan2(dy, dx) - a0
+            while (a < 0f) a += 6.2832f
+            val f = a / span
+            if (f >= 1f) continue
+            val dayF = f * nd
+            val d = dayF.toInt().coerceIn(0, nd - 1); val fr = dayF - d
+            if (d != 0 && d in se.months && fr < .9f) continue
+            val ux = cos(a + a0); val uy = sin(a + a0)
+            val len = inner + (reach(gcx, gcy, ux, uy) * .93f - inner) * (days[d] / most)
+            if (rr > len + 2f * dp) continue
+            val t = rr / len
+            val tip = rr > len - 5f * dp
+            val across = 1f - abs(fr - .5f) * 2f
+            // Each day a fine ray with dark sand between, thinning towards the hinge where they crowd
+            val spine = across.pow(8f)
+            val fade = .25f + .75f * t.pow(1.5f)
+            val dens: Float; val c: Int
+            when {
+                d == se.today -> { dens = .95f * (.4f + .6f * across * across); c = 1 }
+                d < se.today -> { dens = .85f * spine * fade + (if (tip) .55f else 0f) * (.3f + .7f * across); c = if (tip || rng.next() < .85f) 0 else 2 }
+                else -> { dens = .30f * spine * fade + (if (tip) .30f else 0f) * (.3f + .7f * across); c = 2 }
+            }
+            if (rng.next() > dens) continue
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
             k++
         }
         return k
     }
 
-    /** Nebulosa: the room's light changed. The grain is carried to its new arms by the spring. Returns true if anything moves. */
-    fun setLight(t: Float): Boolean {
-        if (style != Style.NEBULOSA) return false
-        val nt = t.coerceIn(0f, 1f)
-        if (abs(nt - light) < .04f) return false
-        val was = light
-        light = nt
-        for (i in 0 until n) {
-            val g = nebGlass(i, nt)
-            val gx0 = Float.fromBits((g ushr 32).toInt()); val gy0 = Float.fromBits(g.toInt())
-            val x = sx(gx0, gy0); val y = sy(gx0, gy0)
-            hx[i] = x; hy[i] = y
-            // Keep the grain where it is and let the swirl carry it to its new arm, the short way round
-            val rho = hypot(x - cx, y - cy); val th = kotlin.math.atan2(y - cy, x - cx)
-            var d = pTh[i] + dTh[i] - th
-            while (d > 3.1416f) d -= 6.2832f
-            while (d < -3.1416f) d += 6.2832f
-            // An arm rewinds the whole way the light asks, outer grain furthest, never torn by taking
-            // the nearer way round: the turn it owes is the change in winding times how far out it lies
-            if (na[i] >= 0f) {
-                val owed = (1.3f * (nt - was)) * kotlin.math.ln((.05f + .90f * na[i]) / .05f)
-                d += 6.2832f * Math.round((owed - d) / 6.2832f)
+    /** How far from (x, y) along (ux, uy) the glass's edge lies. */
+    private fun reach(x: Float, y: Float, ux: Float, uy: Float): Float {
+        var t = 1e9f
+        if (ux > 1e-5f) t = min(t, (gw - x) / ux)
+        if (ux < -1e-5f) t = min(t, -x / ux)
+        if (uy > 1e-5f) t = min(t, (gh - y) / uy)
+        if (uy < -1e-5f) t = min(t, -y / uy)
+        return t
+    }
+
+    // ---- Sentiero: raked gravel, worn by the day's touches ----
+    /**
+     * Sentiero (24 Nov 2026). Raked gravel, fine level lines across the glass, worn by your hand:
+     * every touch on the home screen today presses a hollow with the gravel banked round it, and
+     * every swipe drags a path. Where you go often the hollow is deep and bare; the last hour's
+     * banks wear the accent. At midnight the garden is raked again. The trail is today's, on this
+     * screen, kept on the phone (see [Trail]).
+     */
+    private fun genSentiero(): Int {
+        val cell = 4f * dp
+        val cw = (gw / cell).toInt() + 2; val ch = (gh / cell).toInt() + 2
+        val wear = FloatArray(cw * ch); val fresh = FloatArray(cw * ch)
+        fun splat(x: Float, y: Float, sig: Float, amt: Float, recent: Boolean) {
+            val s = sig / cell; val cx0 = x / cell; val cy0 = y / cell
+            val rad = (s * 3f).toInt() + 1
+            val i0 = (cx0.toInt() - rad).coerceAtLeast(0); val i1 = (cx0.toInt() + rad).coerceAtMost(cw - 1)
+            val j0 = (cy0.toInt() - rad).coerceAtLeast(0); val j1 = (cy0.toInt() + rad).coerceAtMost(ch - 1)
+            val inv = 1f / (2f * s * s)
+            for (j in j0..j1) for (i in i0..i1) {
+                val ddx = i - cx0; val ddy = j - cy0
+                val v = amt * kotlin.math.exp(-(ddx * ddx + ddy * ddy) * inv)
+                wear[j * cw + i] += v
+                if (recent) fresh[j * cw + i] += v
             }
-            dTh[i] = d; dRh[i] = pRh[i] + dRh[i] - rho
-            pRh[i] = rho; pTh[i] = th
         }
-        return true
+        // Each record is fx, fy, kind (0 a tap, 1 a stroke's start, 2 its next point) and age in hours
+        val m = trail.size / 4
+        var px = 0f; var py = 0f
+        for (q in 0 until m) {
+            val x = trail[4 * q] * gw; val y = trail[4 * q + 1] * gh
+            val kind = trail[4 * q + 2].toInt(); val recent = trail[4 * q + 3] < 1f
+            when (kind) {
+                0 -> splat(x, y, 9f * dp, .9f, recent)
+                1 -> splat(x, y, 5f * dp, .45f, recent)
+                else -> {
+                    // A swipe is a path, not a row of prints: laid every 3 dp from the last point
+                    val seg = hypot(x - px, y - py)
+                    val steps = (seg / (3f * dp)).toInt().coerceIn(1, 400)
+                    for (st in 1..steps) { val t = st / steps.toFloat(); splat(px + (x - px) * t, py + (y - py) * t, 5f * dp, .45f * 3f * dp / (8f * dp), recent) }
+                }
+            }
+            px = x; py = y
+        }
+        val hollow = FloatArray(wear.size) { 1f - kotlin.math.exp(-wear[it] * 2.2f) }
+        // The bank: a broader spread of the wear, less the hollow itself
+        val broad = blur(hollow.copyOf(), cw, ch, 3); val broadF = blur(FloatArray(fresh.size) { 1f - kotlin.math.exp(-fresh[it] * 2.2f) }, cw, ch, 3)
+        val rng = Rng(131)
+        val rake = 7f * dp
+        var k = 0; var guard = 0
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * gw; val y = rng.next() * gh
+            val q = (y / cell).toInt().coerceIn(0, ch - 1) * cw + (x / cell).toInt().coerceIn(0, cw - 1)
+            val ho = hollow[q]
+            val rim = (broad[q] * 2.2f - ho * 1.2f).coerceIn(0f, 1f)
+            // The lines, with a gentle swell so they read as raked by hand
+            val ph = ((y + 3f * dp * sin(x / (90f * dp))) / rake) % 1f
+            val line = kotlin.math.exp(-((ph - .5f) / .16f).let { it * it })
+            val dens = (.03f + .62f * line * line) * (1f - ho) * (1f - ho) + 1.1f * rim * (1f - ho)
+            if (rng.next() > dens) continue
+            val c = if (rim > .25f && broadF[q] > broad[q] * .5f) 1 else if (rim > .25f || line > .6f) 0 else 2
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
+            k++
+        }
+        return k
+    }
+
+    /** Three passes of a box blur of [r] cells each way: near enough a Gaussian. In place; returns [a]. */
+    private fun blur(a: FloatArray, cw: Int, ch: Int, r: Int): FloatArray {
+        val t = FloatArray(a.size)
+        val span = 2 * r + 1f
+        repeat(3) {
+            for (j in 0 until ch) {
+                var acc = 0f
+                for (i in -r..r) acc += a[j * cw + i.coerceIn(0, cw - 1)]
+                for (i in 0 until cw) {
+                    t[j * cw + i] = acc / span
+                    acc += a[j * cw + (i + r + 1).coerceAtMost(cw - 1)] - a[j * cw + (i - r).coerceAtLeast(0)]
+                }
+            }
+            for (i in 0 until cw) {
+                var acc = 0f
+                for (j in -r..r) acc += t[j.coerceIn(0, ch - 1) * cw + i]
+                for (j in 0 until ch) {
+                    a[j * cw + i] = acc / span
+                    acc += t[(j + r + 1).coerceAtMost(ch - 1) * cw + i] - t[(j - r).coerceAtLeast(0) * cw + i]
+                }
+            }
+        }
+        return a
+    }
+
+    /**
+     * Sentiero: where on the upright glass, as fractions of its width and height, a touch at surface
+     * x, y lands, so a touch is kept in the same place whichever way the phone is held.
+     */
+    fun glassFrac(x: Float, y: Float): FloatArray {
+        val gx0: Float; val gy0: Float
+        when { !turned -> { gx0 = x; gy0 = y }; quarter == 1 -> { gx0 = gw - y; gy0 = x }; else -> { gx0 = y; gy0 = gh - x } }
+        return floatArrayOf((gx0 / gw).coerceIn(0f, 1f), (gy0 / gh).coerceIn(0f, 1f))
     }
 
     // ---- Delta: a channel for each charge of the week, carved out from the hinge ----
@@ -743,21 +908,6 @@ class Scene(
     fun stir(dir: Int, fast: Boolean, concentrato: Boolean, now: Long, depth: Float = .75f, linger: Float = .95f) {
         val k0 = (if (fast) 7.5f else 4.2f) * dp * dir
         val spread = if (fast) 260f else 520f
-        if (style == Style.NEBULOSA) {
-            // A whirlpool, not a flywheel: the core is set turning first and fastest, and the turn
-            // spreads outwards, weaker and later, so the arms wind up and then unwind
-            val ref = r * .25f
-            for (i in 0 until n) {
-                val rho = pRh[i].coerceAtLeast(6f * dp)
-                // The faint dust between the arms barely stirs, so no bare corner opens up
-                val dust = if (na[i] < -1.5f) .2f else 1f
-                kick[i] = (if (fast) .030f else .018f) * dir * dust * sqrt(ref / rho).coerceIn(.35f, 2.2f) * (.75f + .5f * hash[i])
-                kickAt[i] = now + ((rho / r).coerceAtMost(1f) * spread * 1.6f).toLong()
-            }
-            empty = if (fast && concentrato) depth else 0f
-            decay = linger
-            return
-        }
         for (i in 0 until n) {
             val t = hypot(hx[i] - cx, hy[i] - cy) / r
             kick[i] = k0 * (.35f + .65f * t) * (.85f + .3f * hash[i])
@@ -798,9 +948,7 @@ class Scene(
         var energy = 0f
         // Duna: the loose grain runs, heaps and is blown home in its own pass (see dunaStep)
         if (duna) energy = dunaStep(dt)
-        val neb = style == Style.NEBULOSA
         for (i in 0 until n) {
-            if (neb) { val e = flow(i, now, dt); if (e > energy) energy = e; continue }
             if (duna && gone[i]) { kick[i] = 0f; continue }
             if (kick[i] != 0f) {
                 if (now >= kickAt[i]) {
@@ -836,44 +984,6 @@ class Scene(
         val moving = energy > .01f * dp || pressed || empty > 0f || breathing
         if (!moving) last = 0L
         return moving
-    }
-
-    /**
-     * Nebulosa, one grain, one frame. Pushes from a finger or the fold are taken into the swirl;
-     * the turn relaxes with a stiffness that falls with distance from the core (inner fast, outer
-     * slow), each grain a little different, and with no overshoot, as a thick liquid settles. While
-     * it moves, a fixed field of small eddies curls its path; at rest the eddies are gone.
-     */
-    private fun flow(i: Int, now: Long, dt: Float): Float {
-        var th = pTh[i] + dTh[i]
-        var rho = (pRh[i] + dRh[i]).coerceAtLeast(0f)
-        val c = cos(th); val s = sin(th)
-        val rr = rho.coerceAtLeast(6f * dp)
-        if (vx[i] != 0f || vy[i] != 0f) {
-            wRh[i] += vx[i] * c + vy[i] * s
-            wTh[i] += (-vx[i] * s + vy[i] * c) / rr
-            vx[i] = 0f; vy[i] = 0f
-        }
-        if (kick[i] != 0f && now >= kickAt[i]) { wTh[i] += kick[i]; kick[i] = 0f }
-        val q = (r * .25f / rr).pow(1.5f).coerceIn(.12f, 6f) * (.75f + .5f * hash[i])
-        val kt = .0045f * q
-        val kr = .010f * (.75f + .5f * hash[i])
-        wTh[i] = (wTh[i] - dTh[i] * kt * dt) * kotlin.math.exp(-1.9f * sqrt(kt) * dt)
-        wRh[i] = (wRh[i] - dRh[i] * kr * dt) * kotlin.math.exp(-1.9f * sqrt(kr) * dt)
-        dTh[i] += wTh[i] * dt; dRh[i] += wRh[i] * dt
-        th = pTh[i] + dTh[i]
-        rho = (pRh[i] + dRh[i]).coerceAtLeast(0f)
-        var x = cx + cos(th) * rho; var y = cy + sin(th) * rho
-        val off = abs(dTh[i]) * rr + abs(dRh[i])
-        // Broad, slow eddies, wide enough that the arm bends rather than crimps
-        val amp = min(5f * dp, off * .10f)
-        if (amp > .2f * dp) {
-            x += sin(y / (97f * dp) + 1.3f * sin(x / (151f * dp))) * amp
-            y += sin(x / (113f * dp) + 1.3f * sin(y / (139f * dp))) * amp
-        }
-        ox[i] = x - hx[i]; oy[i] = y - hy[i]
-        if (kick[i] != 0f) return 1f
-        return abs(wTh[i]) * rr + abs(wRh[i]) + off * .01f
     }
 
     /** Interleaved x, y for every grain. */

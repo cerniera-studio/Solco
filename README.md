@@ -12,13 +12,17 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 **Marea.** The grain fills to the battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still.
 
-**Duna.** Wind ripples blowing out from the hinge. Tilt past the angle of repose and the loosest grain slides downhill; level the phone and the wind blows it home.
+**Duna.** Wind ripples blowing out from the hinge. Tilt past the angle of repose and the loosest grain runs downhill and heaps in the corner, as much as came; turn the phone and the heap pours round; level it and the wind blows it home.
 
 **Polvere.** Dust hangs in a shaft of light falling from the sun or moon. The longer the phone lies untouched, the more has settled to the floor; picking it up lifts it back into the light. With the moon set there is no shaft. The shaft is laid again as the sun moves on.
 
-**Nebulosa.** Two arms of grain wound round the hinge, read from the room's light sensor while visible: in a bright room they open wide and loose, in the dark they wind close about the core. The grain is carried, not redrawn, when the light changes.
-
 **Delta.** Each charge of the past week carves a channel out from the hinge, as deep as the charge gave. The oldest silt up; the newest channel's banks wear the finish's accent. The plug is heard for as long as Solco is set, two broadcasts a charge. With no charges yet the sand is flat.
+
+**Pioggia.** The weather outside now, as a long exposure: rain in still streaks slanted by the real wind and as long as the rain is hard, snow in soft clumps that drift on the floor, a dry sky a haze as heavy as its cloud, one fork of lightning in a thunderstorm. Read from Open-Meteo (no key; only the place's latitude and longitude, to two places, are sent) every 20 minutes at most, and only while Pioggia is on screen.
+
+**Stagione.** One ray for each day of the year, fanned from the hinge, as long as that day's daylight at your place: the fan swells to midsummer and pinches at the winter solstice. Days gone are dense, days to come faint, today's ray wears the accent; a hair of bare sand marks each month.
+
+**Sentiero.** Raked gravel worn by your hand. Each touch on the home screen today presses a hollow with the gravel banked round it, and each swipe drags a path; the last hour's banks wear the accent. At midnight the garden is raked again. Kept on the phone, today only, and only while Sentiero is chosen.
 
 ## In every style
 

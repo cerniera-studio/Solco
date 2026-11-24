@@ -6,6 +6,8 @@
 
     <!-- The sun and moon for where the phone is. Coarse only, and only read while Settings is open. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Pioggia (24 Nov 2026): the weather from Open-Meteo. Granted at install; no prompt -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".SolcoApp"

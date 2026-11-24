@@ -133,26 +133,46 @@ adb exec-out screencap -p > shot-duna-after.png
 adb shell input keyevent KEYCODE_BACK; sleep 1
 adb shell wm size reset
 
-# 21 Nov 2026: Polvere, Nebulosa and Delta in every finish on the cover's shape, with Verderame. Delta is
-# given a week of charges; Polvere is left still for a while and woken; Nebulosa is shown dark then bright.
+# 21 Nov 2026: Polvere and Delta in every finish on the cover's shape, with Verderame. Delta is given a
+# week of charges; Polvere is left still for a while and woken.
+# 24 Nov 2026: Nebulosa gave way to Pioggia, Stagione and Sentiero. Pioggia is given a fresh reading of
+# steady rain (so it does not wait on the network), Sentiero a day's touches on the cover.
 NOW=$(date +%s%3N)
 WEEK=""
 for d in 6.6:0.62 5.7:0.55 4.4:0.18 3.6:0.70 2.7:0.48 1.6:0.66 0.5:0.58; do
   age=${d%%:*}; gain=${d##*:}
   WEEK="$WEEK$(python3 -c "print(int($NOW - $age * 86400000))"):$gain;"
 done
+WX="2.2:0:63:95:7:250:$(date +%s)"
+TRAIL=$(python3 - "$NOW" <<'PY'
+import sys, random
+now = int(sys.argv[1]); random.seed(7); out = []
+for (x, y, n) in [(.2, .87, 14), (.4, .87, 9), (.6, .87, 6), (.8, .87, 12), (.2, .62, 5), (.8, .62, 3)]:
+    for _ in range(n): out.append(f"{x + random.uniform(-.025, .025):.4f},{y + random.uniform(-.012, .012):.4f},0,{now - random.randint(600000, 9000000)}")
+for _ in range(8):
+    y = .38 + random.uniform(-.06, .06); x = .85; k = 1
+    while x > .15:
+        out.append(f"{x:.4f},{y:.4f},{k},{now - 3600000}"); x -= .045; k = 2
+print(";".join(out))
+PY
+)
+EXTRA="<string name=\"charges\">${WEEK%;}</string><string name=\"wx\">$WX</string><string name=\"trail_c\">$TRAIL</string>"
 adb shell wm size 1080x2520; sleep 2
-for st in POLVERE NEBULOSA DELTA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
-  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"charges\">${WEEK%;}</string>"
+for st in POLVERE DELTA PIOGGIA STAGIONE SENTIERO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 8
   adb exec-out screencap -p > "shot-new-$st-$fi.png"
   adb shell input keyevent KEYCODE_BACK; sleep 1
 done; done
-prefs "<string name=\"style\">NEBULOSA</string><string name=\"finish\">VERDERAME</string>"
+# Pioggia in snow, then in a thunderstorm
+prefs "<string name=\"style\">PIOGGIA</string><string name=\"finish\">NOTTE</string><string name=\"wx\">0:0.6:73:100:4:300:$(date +%s)</string>"
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
-adb emu sensor set light 0; sleep 8; adb exec-out screencap -p > shot-nebulosa-dark.png
-adb emu sensor set light 2000; sleep 8; adb exec-out screencap -p > shot-nebulosa-bright.png
+sleep 8; adb exec-out screencap -p > shot-pioggia-snow.png
+adb shell input keyevent KEYCODE_BACK; sleep 1
+prefs "<string name=\"style\">PIOGGIA</string><string name=\"finish\">CARBONIO</string><string name=\"wx\">9.5:0:95:100:12:220:$(date +%s)</string>"
+adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
+sleep 8; adb exec-out screencap -p > shot-pioggia-storm.png
 adb shell input keyevent KEYCODE_BACK; sleep 1
 prefs "<string name=\"style\">POLVERE</string><string name=\"finish\">TABACCO</string>"
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
@@ -162,8 +182,8 @@ adb shell wm size reset
 
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in SOLCO TRONCO MAREA DUNA POLVERE NEBULOSA DELTA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
-  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string><string name=\"charges\">${WEEK%;}</string>"
+for st in SOLCO TRONCO MAREA DUNA POLVERE DELTA PIOGGIA STAGIONE SENTIERO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+  prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9
   adb shell input keyevent KEYCODE_BACK

@@ -20,8 +20,3 @@ object Power {
         return level to (st == BatteryManager.BATTERY_STATUS_CHARGING || st == BatteryManager.BATTERY_STATUS_FULL && i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
     }
 }
-
-/** The room's light for Nebulosa: lux on a log scale, 0 in the dark (under 1 lux) to 1 at 1,000 lux and over. */
-object Lumen {
-    @JvmStatic fun of(lux: Float): Float = (kotlin.math.log10(1f + lux.coerceAtLeast(0f)) / 3f).coerceIn(0f, 1f)
-}

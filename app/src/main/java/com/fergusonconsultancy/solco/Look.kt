@@ -42,8 +42,11 @@ enum class Style(val title: String, val note: String) {
     MAREA("Marea", "The grain fills to your battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still."),
     DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain runs downhill and heaps in the corner, as much as came; turn the phone and the heap pours round; level it and the wind blows it home."),
     POLVERE("Polvere", "Dust hangs in a shaft of light from the sun or moon. The longer the phone lies untouched, the more of it has settled to the floor; picking it up lifts it back into the light."),
-    NEBULOSA("Nebulosa", "Two arms of grain wound round the hinge. The room's light sets how tightly: in a bright room they open wide and loose, in the dark they wind close about the core."),
     DELTA("Delta", "Each charge carves a channel out from the hinge, as deep as the charge was long. Over a week they braid a delta, the oldest silting up; the newest channel's banks wear the accent."),
+    // 24 Nov 2026: Nebulosa (the room's light) gave way to these three
+    PIOGGIA("Pioggia", "The weather outside now, as a long exposure: rain in streaks slanted by the real wind, snow in soft clumps, a dry sky a haze as heavy as its cloud. Read from Open-Meteo for your place, every 20 minutes while it is on screen."),
+    STAGIONE("Stagione", "One ray for each day of the year, fanned from the hinge, as long as that day's daylight here. Days gone are dense, days to come faint; today's ray wears the accent."),
+    SENTIERO("Sentiero", "Raked gravel worn by your hand: each touch on the home screen today presses a hollow, each swipe drags a path, and the last hour's banks wear the accent. At midnight it is raked again. Kept on the phone."),
 }
 
 /**
@@ -77,7 +80,11 @@ object Prefs {
     @JvmStatic fun of(c: Context): SharedPreferences = c.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
     @JvmStatic fun isLook(key: String?) = key != null && key in LOOK
 
-    fun style(c: Context) = runCatching { Style.valueOf(of(c).getString("style", null) ?: "SOLCO") }.getOrDefault(Style.SOLCO)
+    fun style(c: Context): Style {
+        // Nebulosa was retired on 24 Nov 2026: a saved choice of it carries over to Stagione
+        val name = when (val n = of(c).getString("style", null)) { "NEBULOSA" -> "STAGIONE"; null -> "SOLCO"; else -> n }
+        return runCatching { Style.valueOf(name) }.getOrDefault(Style.SOLCO)
+    }
     fun finish(c: Context): Finish {
         val name = when (val n = of(c).getString("finish", null)) { "AVORIO" -> "TABACCO"; "ROSSO" -> "NOTTE"; null -> "VISCONTI"; else -> n }
         return runCatching { Finish.valueOf(name) }.getOrDefault(Finish.VISCONTI)
