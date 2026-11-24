@@ -643,33 +643,40 @@ class Scene(
         var most = 0f
         for (d in days) if (d > most) most = d
         if (most <= 0f) most = 1f
+        val share = FloatArray(nd) { days[it] / most }
         val span = if (cover) 3.1416f else 6.2832f
         val a0 = -1.5708f
         val inner = 14f * dp
+        // Candidates are drawn only inside the fan: a day chosen by the area of its ray, then a
+        // point spread evenly over that ray's wedge (a sixth the work of trying the whole glass)
+        // Each ray's length, taken along its middle: within one day the edge of the glass moves by
+        // less than a grain, so a grain's density is settled before any trigonometry is done
+        val len = FloatArray(nd) { d ->
+            val ac = a0 + span * (d + .5f) / nd
+            inner + (reach(gcx, gcy, cos(ac), sin(ac)) * .93f - inner) * share[d]
+        }
+        val cum = FloatArray(nd)
+        var acc = 0f
+        for (d in 0 until nd) { val far = len[d] + 2f * dp; acc += far * far; cum[d] = acc }
         val rng = Rng(101)
         var k = 0; var guard = 0
         while (k < cap && guard < cap * 40) {
             guard++
-            val x = rng.next() * gw; val y = rng.next() * gh
-            val dx = x - gcx; val dy = y - gcy
-            val rr = hypot(dx, dy)
+            val pick = rng.next() * acc
+            var lo = 0; var hi = nd - 1
+            while (lo < hi) { val m = (lo + hi) ushr 1; if (cum[m] < pick) lo = m + 1 else hi = m }
+            val d = lo
+            val fr = rng.next()
+            val rr = (len[d] + 2f * dp) * sqrt(rng.next())
             if (rr < inner) continue
-            var a = kotlin.math.atan2(dy, dx) - a0
-            while (a < 0f) a += 6.2832f
-            val f = a / span
-            if (f >= 1f) continue
-            val dayF = f * nd
-            val d = dayF.toInt().coerceIn(0, nd - 1); val fr = dayF - d
             if (d != 0 && d in se.months && fr < .9f) continue
-            val ux = cos(a + a0); val uy = sin(a + a0)
-            val len = inner + (reach(gcx, gcy, ux, uy) * .93f - inner) * (days[d] / most)
-            if (rr > len + 2f * dp) continue
-            val t = rr / len
-            val tip = rr > len - 5f * dp
+            val t = rr / len[d]
+            val tip = rr > len[d] - 5f * dp
             val across = 1f - abs(fr - .5f) * 2f
             // Each day a fine ray with dark sand between, thinning towards the hinge where they crowd
-            val spine = across.pow(8f)
-            val fade = .25f + .75f * t.pow(1.5f)
+            val a2 = across * across; val a4 = a2 * a2
+            val spine = a4 * a4
+            val fade = .25f + .75f * t * sqrt(t)
             val dens: Float; val c: Int
             when {
                 d == se.today -> { dens = .95f * (.4f + .6f * across * across); c = 1 }
@@ -677,6 +684,9 @@ class Scene(
                 else -> { dens = .30f * spine * fade + (if (tip) .30f else 0f) * (.3f + .7f * across); c = 2 }
             }
             if (rng.next() > dens) continue
+            val a = a0 + span * (d + fr) / nd
+            val x = gcx + cos(a) * rr; val y = gcy + sin(a) * rr
+            if (x < 0f || y < 0f || x >= gw || y >= gh) continue
             hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
             k++
         }
