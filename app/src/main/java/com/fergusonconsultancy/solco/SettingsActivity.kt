@@ -96,7 +96,7 @@ class SettingsActivity : Activity() {
                 styleTiles += s to t
                 styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
             }
-            // Nine styles: the last stands alone at a tile's width, not stretched across the row
+            // Ten styles, two by two
             if (pair.size < 2) styleRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = px(12) })
             screen.add(styleRow, if (r > 0) px(14) else 0)
         }

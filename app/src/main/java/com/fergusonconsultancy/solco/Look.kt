@@ -47,6 +47,8 @@ enum class Style(val title: String, val note: String) {
     PIOGGIA("Pioggia", "The weather outside now, as a long exposure: rain in streaks slanted by the real wind, snow in soft clumps, a dry sky a haze as heavy as its cloud. Read from Open-Meteo for your place, every 20 minutes while it is on screen."),
     STAGIONE("Stagione", "One ray for each day of the year, fanned from the hinge, as long as that day's daylight here. Days gone are dense, days to come faint; today's ray wears the accent."),
     SENTIERO("Sentiero", "Raked gravel worn by your hand: each touch on the home screen today presses a hollow, each swipe drags a path, and the last hour's banks wear the accent. At midnight it is raked again. Kept on the phone."),
+    // 25 Nov 2026: from claude/deserto-design.md
+    DESERTO("Deserto", "One great dune across the crease, lit from the side the sun or moon is on. While the phone is locked the time stands in the sky behind its crest, as a depth effect does; hide One UI's own clock to see it alone."),
 }
 
 /**

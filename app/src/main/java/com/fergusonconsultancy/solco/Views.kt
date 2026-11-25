@@ -75,7 +75,9 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
             sky = sky, charges = if (style == Style.DELTA) Charges.channels(context) else FloatArray(0),
             weather = if (style == Style.PIOGGIA) Weather.now(context) else null,
             season = if (style == Style.STAGIONE) Seasons.now() else null,
-            trail = if (style == Style.SENTIERO) Trail.points(context, FoldWatch.tall(width, height)) else FloatArray(0))
+            trail = if (style == Style.SENTIERO) Trail.points(context, FoldWatch.tall(width, height)) else FloatArray(0),
+            // Deserto: the preview always shows the clock, as the lock screen will
+            clock = if (style == Style.DESERTO) ClockPaint.mask(context, width, height, dp, FoldWatch.tall(width, height)) else null)
         // Pioggia: a fresh reading if one is due, then the rain as it is now
         if (style == Style.PIOGGIA && Weather.due(context)) Weather.fetch(context) { post { if (Prefs.style(context) == Style.PIOGGIA) rebuild() } }
         back?.recycle(); disc?.recycle(); spark?.recycle()
@@ -173,7 +175,8 @@ fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) 
         // The tiles show a plausible case of each force, as Delta's shows a sample week
         weather = if (style == Style.PIOGGIA) Wx.SAMPLE else null,
         season = if (style == Style.STAGIONE) Seasons.now() else null,
-        trail = if (style == Style.SENTIERO) Trail.sample() else FloatArray(0))
+        trail = if (style == Style.SENTIERO) Trail.sample() else FloatArray(0),
+        clock = if (style == Style.DESERTO) ClockPaint.mask(c, w, h, dp, true) else null)
     // Polvere's tile shows some dust on the floor, as after a while lying still
     s.settle(.4f)
     val back = Backdrop.paint(s, f)

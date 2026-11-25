@@ -15,6 +15,7 @@ import java.util.concurrent.Executors
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -90,6 +91,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         // Stagione moves on a day at midnight; Sentiero is raked again then, and relaid as the trail grows
         if ((s.style == Style.STAGIONE || s.style == Style.SENTIERO) && LocalDate.now() != builtDay) dirtyBuild = true
         if (s.style == Style.SENTIERO && Trail.version != builtTrail && !tracking) dirtyBuild = true
+        // Deserto: a new minute while the clock shows
+        if (s.style == Style.DESERTO && (locked || preview) && builtMinute != minuteNow()) dirtyBuild = true
         // Pioggia: a new reading of the weather
         if (s.style == Style.PIOGGIA && (Weather.now(ctx)?.at ?: 0L) != builtWx) dirtyBuild = true
         // Delta's channels silt up as they age: carved again once an hour at most
@@ -147,6 +150,22 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     /** The tilt changed (Duna). Screen axes, y down. */
     fun tilt(x: Float, y: Float) { scene?.tilt(x, y) }
 
+    /**
+     * Deserto: whether the phone is locked (the clock shows), or this is the system's preview (the
+     * clock shows so it can be seen before it is set), and the minute the clock was laid for.
+     */
+    @Volatile var locked = false
+    @Volatile var preview = false
+    @Volatile private var builtMinute = -1
+    private fun minuteNow() = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+
+    /** Locked or unlocked: the clock's grain is already laid, so it only needs drawing or not. */
+    fun locked(v: Boolean) {
+        locked = v
+        val s = scene ?: return
+        if (v && s.style == Style.DESERTO && builtMinute != minuteNow()) dirtyBuild = true
+    }
+
     /** What the last build was laid from: Pioggia's reading and Sentiero's trail. */
     @Volatile private var builtWx = 0L
     @Volatile private var builtTrail = -1
@@ -184,8 +203,11 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val wx = if (style == Style.PIOGGIA) Weather.now(ctx) else null
                 builtWx = wx?.at ?: 0L
                 builtTrail = Trail.version
+                // Deserto: the clock is laid every time, so it is there the moment the phone locks
+                builtMinute = minuteNow()
+                val clk = if (style == Style.DESERTO) ClockPaint.mask(ctx, bw, bh, dp, FoldWatch.tall(bw, bh)) else null
                 val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
-                    sky = if (style == Style.POLVERE) Sky.now(Prefs.notturno(ctx)) else null,
+                    sky = if (style == Style.POLVERE || style == Style.DESERTO) Sky.now(Prefs.notturno(ctx)) else null, clock = clk,
                     charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0),
                     weather = wx, season = if (style == Style.STAGIONE) Seasons.now() else null,
                     trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0))
@@ -260,6 +282,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         val sky = Sky.now(Prefs.notturno(ctx))
         // Polvere's shaft falls from the disc: rebuilt once the sun or moon has moved on, or set
         if (s.style == Style.POLVERE && (kotlin.math.abs(sky.alt - s.skyAlt) > .04f || sky.shown != s.skyShown)) dirtyBuild = true
+        // Deserto: relit when the light crosses to the other side at noon, or night falls or lifts
+        if (s.style == Style.DESERTO && ((sky.minutes < 720) != s.litMorning || !sky.day != s.atNight)) dirtyBuild = true
         disc = s.disc(sky)
         shown = sky.shown
         val bmp = DiscPainter.paint(finish, sky, Prefs.luna(ctx), disc[2], s.dp)
@@ -331,7 +355,9 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progPts, "uSize"), dot)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progPts, "uEmpty"), s.empty)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progPts, "uAlpha"), finish.grainA)
-            GLES20.glDrawArrays(GLES20.GL_POINTS, 0, s.n)
+            // Deserto's clock is the last of the grain: drawn only while the phone is locked
+            val count = if (s.style == Style.DESERTO && !(locked || preview)) min(s.clockFrom, s.n) else s.n
+            GLES20.glDrawArrays(GLES20.GL_POINTS, 0, count)
             GLES20.glDisableVertexAttribArray(aPos)
             GLES20.glDisableVertexAttribArray(aCol)
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
