@@ -24,6 +24,8 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 **Sentiero.** Raked gravel worn by your hand. Each touch on the home screen today presses a hollow with the gravel banked round it, and each swipe drags a path; the last hour's banks wear the accent. At midnight the garden is raked again. Kept on the phone, today only, and only while Sentiero is chosen.
 
+**Deserto.** One great dune across the crease, a true heightfield seen from a low eye and lit from the side the sun or moon is on, its backlit crest catching a rim in the accent. While the phone is locked the time stands in the sky behind the crest, in Italiana, as a depth effect does. A live wallpaper is drawn beneath the lock screen, so One UI's own clock cannot go behind the dune: Solco draws its own and shows it only while locked. Hide One UI's clock (Lock screen settings) to see it alone.
+
 ## In every style
 
 - **The disc** is the sun by day and the moon by night, riding a ring round the hinge: low at dawn and dusk, highest at noon. Cooler and brighter by day, warmer and dimmer at night.

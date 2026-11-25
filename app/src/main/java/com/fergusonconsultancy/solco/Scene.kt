@@ -2,6 +2,7 @@ package com.fergusonconsultancy.solco
 
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -43,6 +44,8 @@ class Scene(
     private val trail: FloatArray = FloatArray(0),
     /** Delta: each charge of the week as age in days, gain and seed (see [Charges]). */
     private val charges: FloatArray = FloatArray(0),
+    /** Deserto: the time's shape, to stand behind the crest (see [ClockPaint]); without it, no clock. */
+    private val clock: ClockMask? = null,
 ) {
     val cover: Boolean = coverOverride ?: FoldWatch.tall(w, h)
     /**
@@ -51,7 +54,7 @@ class Scene(
      * surface is a turned one; the display's rotation says which way. Tiles are never turned.
      */
     val quarter: Int = if (coverOverride != null || w <= h) 0 else if (rotation == 3) 3 else 1
-    private val turned = quarter != 0 && style != Style.MAREA && style != Style.POLVERE && style != Style.PIOGGIA
+    private val turned = quarter != 0 && style != Style.MAREA && style != Style.POLVERE && style != Style.PIOGGIA && style != Style.DESERTO
     /** The glass's own upright size, in which the hinge styles are laid out before turning. */
     private val gw: Int = if (turned) h else w
     private val gh: Int = if (turned) w else h
@@ -86,10 +89,21 @@ class Scene(
     /** Polvere: the sky the shaft was built for, so the renderer knows when the sun has moved on. */
     val skyAlt: Float = sky?.alt ?: -1f
     val skyShown: Boolean = sky?.shown ?: false
+    /** Deserto: whether the dune was lit from the left (the morning) and by night, so the renderer knows when to relight it. */
+    val litMorning: Boolean = (sky?.minutes ?: 600) < 720
+    val atNight: Boolean = sky?.day == false
     private val skyAt: SkyState? = sky
     /** Polvere: which grains hang in the light (and so can settle), and the floor they settle to. */
     private val airborne = BooleanArray(if (style == Style.POLVERE) cap else 0)
     private val floorY = h * .955f
+    /**
+     * Deserto: the first of the clock's grains (all after it are the clock, drawn only while locked),
+     * and the skyline it was cut against. Declared before [n], because laying the grain sets them.
+     */
+    var clockFrom: Int = Int.MAX_VALUE
+        private set
+    private var deserSky = FloatArray(0)
+    private var deserCell = 1f
 
     val n: Int = when (style) {
         Style.SOLCO -> genSolco()
@@ -101,6 +115,7 @@ class Scene(
         Style.PIOGGIA -> genPioggia()
         Style.STAGIONE -> genStagione()
         Style.SENTIERO -> genSentiero()
+        Style.DESERTO -> genDeserto()
     }.also { k ->
         if (turned) for (i in 0 until k) { val x = hx[i]; val y = hy[i]; hx[i] = sx(x, y); hy[i] = sy(x, y) }
     }
@@ -529,6 +544,99 @@ class Scene(
         }
     }
 
+    // ---- Deserto: one great dune, the clock behind its crest ----
+    /**
+     * Deserto (25 Nov 2026). The dune is a true heightfield seen from a low eye (see [Dune]), cast
+     * column by column from near to far, each cell lit by the low sun or moon and exposed for the
+     * brightest sand, as a camera would be. Grain then falls by the light, from a fixed number of
+     * tries, so the shade stays dark. The backlit crest catches a rim in the accent; at night the sky
+     * holds a few stars. Last of all, and only where the sky shows, the clock: its grain sits from
+     * [clockFrom] to the end, so the renderer draws it only while the phone is locked.
+     */
+    private fun genDeserto(): Int {
+        val lay = DesertoLayout(w, h, cover)
+        val minutes = skyAt?.minutes ?: 600
+        val night = skyAt?.day == false
+        val dune = Dune(w, h, cover, lay, minutes < 720)
+        val cell = 2f * dp
+        val cw = (w / cell).toInt() + 1; val ch = (h / cell).toInt() + 1
+        val light = FloatArray(cw * ch) { -1f }
+        val great = BooleanArray(cw * ch)
+        val skyline = FloatArray(cw)
+        for (i in 0 until cw) {
+            val x = (i + .5f) * cell
+            var ymax = h.toFloat()
+            var z = 3f
+            while (z < 900f && ymax > 0f) {
+                val xw = (x - dune.cx) * z / dune.f
+                val hh = dune.height(xw, z)
+                val ys = lay.horizon + (dune.eye - hh) * dune.f / z
+                if (ys < ymax) {
+                    val b = dune.light(xw, z)
+                    val j0 = max(0, (ys / cell).toInt()); val j1 = min(ch, (ymax / cell).toInt() + 1)
+                    for (j in j0 until j1) { val q = j * cw + i; if (light[q] < 0f) { light[q] = b; great[q] = hh > 2f } }
+                    ymax = ys
+                }
+                z *= 1.012f
+            }
+            skyline[i] = ymax
+        }
+        // Exposed for the brightest sand of the great dune (its 98th percentile)
+        val hist = IntArray(256); var lit = 0
+        for (q in light.indices) if (light[q] >= 0f && great[q]) { hist[(light[q] * 255f).toInt().coerceIn(0, 255)]++; lit++ }
+        var top = 1f
+        if (lit > 0) { var acc = 0; for (b in 0 until 256) { acc += hist[b]; if (acc >= lit * .98f) { top = max(b / 255f, .01f); break } } }
+        deserSky = skyline; deserCell = cell
+        val rng = Rng(151)
+        val budget = (cap * .88f).toInt()
+        var k = 0
+        val tries = (cap * 1.7f).toInt()
+        for (t in 0 until tries) {
+            if (k >= budget) break
+            val x = rng.next() * w; val y = rng.next() * h
+            val i = (x / cell).toInt().coerceAtMost(cw - 1); val j = (y / cell).toInt().coerceAtMost(ch - 1)
+            val raw = light[j * cw + i]
+            val sk = skyline[i]
+            var dens: Float; var c: Int
+            if (raw < 0f) {
+                dens = (if (night) .006f else .004f) + (if (night) .03f else .05f) * exp(-(sk - y) / (80f * dp))
+                c = if (night && rng.next() < .35f) 0 else 2
+            } else {
+                val b = min(1f, raw / top)
+                dens = .02f + .98f * Math.pow(b.toDouble(), 1.1).toFloat()
+                c = if (b > .3f) 0 else 2
+                // The backlit edge catches a rim of light
+                if (b < .12f && y - sk < 3.2f * dp) { dens = .97f; c = 1 }
+            }
+            if (rng.next() >= dens) continue
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
+            k++
+        }
+        clockFrom = k
+        val m = clock ?: return k
+        val reach = lay.height * 1.25f
+        // Three times as dense as the brightest sand: the time is read at a glance
+        val clockTries = (w * reach / (4.2f * dp * dp) * 5f).toInt()
+        for (g in 0 until clockTries) {
+            if (k >= cap) break
+            val x = rng.next() * w; val y = lay.top + rng.next() * reach
+            if (!m.at(x, y)) continue
+            // Behind the crest: only where the sky shows
+            if (y > skyline[(x / cell).toInt().coerceAtMost(cw - 1)] - 1.5f * dp) continue
+            if (rng.next() >= .9f) continue
+            hx[k] = x; hy[k] = y; col[k] = 0; hash[k] = rng.next()
+            k++
+        }
+        return k
+    }
+
+    /** Deserto: where the sky meets the sand, column by column, to set the sun or moon above it. */
+    private fun skyAtX(x: Float): Float {
+        val s = deserSky
+        if (s.isEmpty()) return h * .5f
+        return s[(x / deserCell).toInt().coerceIn(0, s.size - 1)]
+    }
+
     // ---- Pioggia: the weather outside, drawn as a long exposure ----
     /**
      * Pioggia (24 Nov 2026). The rain falling now where the phone is, as a long-exposure photograph
@@ -878,6 +986,14 @@ class Scene(
     // ---- The disc rides a ring round the hinge: low at dawn and dusk, highest at noon ----
     /** x, y and radius of the disc for [sky]. */
     fun disc(sky: SkyState): FloatArray {
+        if (style == Style.DESERTO) {
+            // Low in the sky on the side the light comes from, always clear of the clock and above the sand
+            val rad = (if (cover) .07f else .055f) * min(w, h)
+            val x = if (sky.minutes < 720) w * (if (cover) .13f else .17f) else w * (if (cover) .87f else .83f)
+            val ground = skyAtX(x) - rad - 10f * dp
+            val high = h * .10f + rad
+            return floatArrayOf(x, ground - (ground - high).coerceAtLeast(0f) * sky.alt.coerceIn(0f, 1f) * .6f, rad)
+        }
         val rad = (if (cover) .21f else .11f) * min(w, h)
         val phi = Math.toRadians(-60.0 + 120.0 * sky.alt).toFloat()
         val ring = r * .30f

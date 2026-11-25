@@ -154,6 +154,26 @@ public class SolcoWallpaperService extends WallpaperService {
             });
         }
 
+        /**
+         * Deserto: the phone locking and unlocking. The clock's grain is already laid, so a change
+         * only needs a frame. Heard for as long as the engine lives, since the screen goes dark first.
+         */
+        private final BroadcastReceiver lock = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) {
+                GLView v = view;
+                if (v == null) return;
+                final boolean locked = !Intent.ACTION_USER_PRESENT.equals(i.getAction()) && keyguardLocked();
+                v.queueEvent(() -> renderer.locked(locked));
+                v.requestRender();
+            }
+        };
+
+        private boolean keyguardLocked() {
+            android.app.KeyguardManager k = (android.app.KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            return k != null && k.isKeyguardLocked();
+        }
+
         private final BroadcastReceiver clock = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent i) {
@@ -189,6 +209,14 @@ public class SolcoWallpaperService extends WallpaperService {
             view.setRenderer(renderer);
             view.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
             Prefs.of(c).registerOnSharedPreferenceChangeListener(this);
+            renderer.setPreview(isPreview());
+            renderer.locked(keyguardLocked());
+            IntentFilter lf = new IntentFilter();
+            lf.addAction(Intent.ACTION_SCREEN_OFF);
+            lf.addAction(Intent.ACTION_SCREEN_ON);
+            lf.addAction(Intent.ACTION_USER_PRESENT);
+            if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(lock, lf, Context.RECEIVER_NOT_EXPORTED);
+            else c.registerReceiver(lock, lf);
             sensors = (SensorManager) c.getSystemService(Context.SENSOR_SERVICE);
             // The hinge (the Kit's) is heard for as long as the wallpaper is set: the screen goes dark
             // before the hinge finishes moving, so a visible-only listener never had a fold's readings
@@ -250,7 +278,8 @@ public class SolcoWallpaperService extends WallpaperService {
                 final long rest = hiddenAt > 0L ? android.os.SystemClock.elapsedRealtime() - hiddenAt : 0L;
                 if (rest > 0L) view.queueEvent(() -> renderer.rest(rest));
                 listen(true);
-                view.queueEvent(() -> renderer.refresh());
+                final boolean locked = keyguardLocked();
+                view.queueEvent(() -> { renderer.locked(locked); renderer.refresh(); });
                 arrive();
                 weather();
             } else {
@@ -355,6 +384,7 @@ public class SolcoWallpaperService extends WallpaperService {
         public void onDestroy() {
             Prefs.of(SolcoWallpaperService.this).unregisterOnSharedPreferenceChangeListener(this);
             Trail.INSTANCE.save(SolcoWallpaperService.this);
+            try { SolcoWallpaperService.this.unregisterReceiver(lock); } catch (IllegalArgumentException ignored) { }
             listen(false);
             if (sensors != null) sensors.unregisterListener(this);
             FoldWatch.unlisten();

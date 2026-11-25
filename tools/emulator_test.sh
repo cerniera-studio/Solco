@@ -158,7 +158,7 @@ PY
 )
 EXTRA="<string name=\"charges\">${WEEK%;}</string><string name=\"wx\">$WX</string><string name=\"trail_c\">$TRAIL</string>"
 adb shell wm size 1080x2520; sleep 2
-for st in POLVERE DELTA PIOGGIA STAGIONE SENTIERO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 8
@@ -182,7 +182,7 @@ adb shell wm size reset
 
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in SOLCO TRONCO MAREA DUNA POLVERE DELTA PIOGGIA STAGIONE SENTIERO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in SOLCO TRONCO MAREA DUNA POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9
