@@ -11,7 +11,8 @@
 
     <!-- Copertina (26 Nov 2026): the sleeve's colours, shared by Fold Widgets -->
     <queries>
-        <provider android:authorities="com.cerniera.copertina" />
+        <!-- By package: a second provider entry clashes with the Kit's in the manifest merger -->
+        <package android:name="com.fergusonconsultancy.foldwidgets" />
     </queries>
 
     <application
