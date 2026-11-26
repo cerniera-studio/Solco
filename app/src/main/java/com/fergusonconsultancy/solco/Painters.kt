@@ -47,10 +47,24 @@ object Backdrop {
 object DiscPainter {
     /** [tint]: the live wallpaper and its preview take Copertina's colours; the Settings tiles never do. */
     fun paint(f: Finish, sky: SkyState, luna: Boolean, rad: Float, dp: Float, tint: Boolean = false): Bitmap {
-        val s = ceil(rad * 2 + 4).toInt().coerceAtLeast(4)
+        // Copertina: a lens of the sleeve's colour round the disc, out to 1.7 radii (the picture grows to hold it;
+        // it is drawn centred on the disc, so nothing else moves)
+        val glow = if (tint) Copertina.glow() else null
+        val reach = if (glow != null) 1.7f else 1f
+        val s = ceil(rad * 2 * reach + 4).toInt().coerceAtLeast(4)
         val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
         val g = Canvas(b)
         val k = s / 2f
+        if (glow != null) {
+            val a = Copertina.amount * (if (sky.day) .62f else .42f)
+            val R = rad * reach
+            val edge = rad / R
+            g.drawCircle(k, k, R, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                // Clear inside the disc, so a crescent moon's unlit side stays dark; brightest at the rim, gone by 1.7 radii
+                shader = RadialGradient(k, k, R, intArrayOf(withAlpha(glow, 0f), withAlpha(glow, 0f), withAlpha(glow, a), withAlpha(glow, a * .35f), withAlpha(glow, 0f)),
+                    floatArrayOf(0f, edge * .97f, edge, edge + (1f - edge) * .35f, 1f), Shader.TileMode.CLAMP)
+            })
+        }
         val col = if (tint) Copertina.disc(f, sky.day) else if (sky.day) f.discDay else f.discNight
         val dim = if (sky.day) 1f else .82f
         val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -105,6 +119,10 @@ object DiscPainter {
             withAlpha(0xFFFAF0, if (sky.day) .16f else .08f), withAlpha(0xFFFAF0, 0f), Shader.TileMode.CLAMP)
         g.drawRect(0f, 0f, s.toFloat(), s.toFloat(), Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = hl })
         g.restore()
+        // The lens's rim: a fine line of the sleeve's colour where the lamp meets the glass
+        if (glow != null) g.drawCircle(k, k, rad, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; strokeWidth = max(1f, 1.4f * dp); color = withAlpha(glow, .55f * Copertina.amount)
+        })
         return b
     }
 }

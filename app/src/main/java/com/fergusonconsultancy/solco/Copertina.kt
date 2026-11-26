@@ -86,6 +86,13 @@ object Copertina {
         return CopertinaRules.tint(base, p[0], amount * .8f)
     }
 
+    /**
+     * The sun's glow (26 Nov 2026, Mechack's reins handed over): the disc stays a pale lamp, since
+     * it still tells the time, and the sleeve's first colour shows as a lens round it, the way an
+     * Alfa tail light is white at the bulb and red in the glass. Null when no sleeve is in.
+     */
+    fun glow(): Int? = colours?.let { CopertinaRules.lens(it[0]) }
+
     /** Five made-up sleeves for Show me: a spread of what records look like, not any one record. */
     val SAMPLES = listOf(
         intArrayOf(0x2E4A8C, 0xE0A040),   // night blue, amber
@@ -110,6 +117,9 @@ object CopertinaRules {
         fun mix(sh: Int) = (ch(base, sh) + (ch(target, sh) - ch(base, sh)) * t).toInt().coerceIn(0, 255)
         return (mix(16) shl 16) or (mix(8) shl 8) or mix(0)
     }
+
+    /** A colour as a lit lens: the sleeve's hue, rich but not neon, at a mid lightness that glows on a dark ground. */
+    fun lens(sleeve: Int): Int { val h = hsl(sleeve); return rgb(h[0], h[1].coerceIn(.45f, .85f), .58f) }
 
     /** 0xRRGGBB to hue (0..360), saturation and lightness (0..1). */
     fun hsl(c: Int): FloatArray {
