@@ -77,7 +77,7 @@ enum class Linger(val title: String, val decay: Float) {
 object Prefs {
     private const val NAME = "solco"
     /** The keys that change how the wallpaper looks. Anything else (growth, diagnostics) must not redraw it. */
-    private val LOOK = setOf("style", "finish", "luna", "notturno", "concentrato", "sky_at")
+    private val LOOK = setOf("style", "finish", "luna", "notturno", "concentrato", "sky_at", "copertina")
 
     @JvmStatic fun of(c: Context): SharedPreferences = c.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
     @JvmStatic fun isLook(key: String?) = key != null && key in LOOK

@@ -95,6 +95,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (s.style == Style.DESERTO && (locked || preview) && builtMinute != minuteNow()) dirtyBuild = true
         // Pioggia: a new reading of the weather
         if (s.style == Style.PIOGGIA && (Weather.now(ctx)?.at ?: 0L) != builtWx) dirtyBuild = true
+        // Copertina: the sleeve's colours (or the strength) changed since the grain was coloured
+        if (Copertina.read(ctx) != builtCopertina) { dirtyBuild = true; dirtySky = true }
         // Delta's channels silt up as they age: carved again once an hour at most
         if (s.style == Style.DELTA && SystemClock.elapsedRealtime() - builtAt > 60 * 60_000L) dirtyBuild = true
     }
@@ -203,6 +205,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val wx = if (style == Style.PIOGGIA) Weather.now(ctx) else null
                 builtWx = wx?.at ?: 0L
                 builtTrail = Trail.version
+                builtCopertina = Copertina.read(ctx)
                 // Deserto: the clock is laid every time, so it is there the moment the phone locks
                 builtMinute = minuteNow()
                 val clk = if (style == Style.DESERTO) ClockPaint.mask(ctx, bw, bh, dp, FoldWatch.tall(bw, bh)) else null
@@ -213,7 +216,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                     trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0))
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
-                    val c = f.grain[sc.col[i].toInt()]
+                    val c = Copertina.grain(f, sc.col[i].toInt())
                     cols[4 * i] = ((c shr 16) and 0xFF) / 255f
                     cols[4 * i + 1] = ((c shr 8) and 0xFF) / 255f
                     cols[4 * i + 2] = (c and 0xFF) / 255f
@@ -262,6 +265,9 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
 
     private var lastBuildMs = 0L
 
+    /** The sleeve the grain was last coloured for ("" for the finish's own). */
+    @Volatile private var builtCopertina = ""
+
     /** Sveglia's dawn glow, repainted only when its level moves a fortieth (40 steps over the dawn). */
     private var glowLevel = -1
 
@@ -286,7 +292,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (s.style == Style.DESERTO && ((sky.minutes < 720) != s.litMorning || !sky.day != s.atNight)) dirtyBuild = true
         disc = s.disc(sky)
         shown = sky.shown
-        val bmp = DiscPainter.paint(finish, sky, Prefs.luna(ctx), disc[2], s.dp)
+        val bmp = DiscPainter.paint(finish, sky, Prefs.luna(ctx), disc[2], s.dp, tint = true)
         discSize = bmp.width
         upload(tex[1], bmp)
         bmp.recycle()

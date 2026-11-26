@@ -81,9 +81,10 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         // Pioggia: a fresh reading if one is due, then the rain as it is now
         if (style == Style.PIOGGIA && Weather.due(context)) Weather.fetch(context) { post { if (Prefs.style(context) == Style.PIOGGIA) rebuild() } }
         back?.recycle(); disc?.recycle(); spark?.recycle()
+        Copertina.read(context)
         back = Backdrop.paint(s, finish)
         dpos = s.disc(sky)
-        disc = if (sky.shown) DiscPainter.paint(finish, sky, Prefs.luna(context), dpos[2], dp) else null
+        disc = if (sky.shown) DiscPainter.paint(finish, sky, Prefs.luna(context), dpos[2], dp, tint = true) else null
         sparks = sky.sparks.map { s.spark(it, sky) }
         spark = if (sparks.isNotEmpty()) SparkPainter.paint(finish) else null
         scene = s
@@ -107,7 +108,7 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         val s = scene ?: return
         val b = back ?: return
         val moving = s.step(SystemClock.uptimeMillis())
-        painter.draw(canvas, s, finish, b, disc, dpos[0], dpos[1], max(1f, s.dp * 1.05f), sparks, spark)
+        painter.draw(canvas, s, finish, b, disc, dpos[0], dpos[1], max(1f, s.dp * 1.05f), sparks, spark, tint = true)
         if (moving) postInvalidateOnAnimation()
     }
 

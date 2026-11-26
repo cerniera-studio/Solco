@@ -9,6 +9,12 @@
     <!-- Pioggia (24 Nov 2026): the weather from Open-Meteo. Granted at install; no prompt -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Copertina (26 Nov 2026): the sleeve's colours, shared by Fold Widgets -->
+    <queries>
+        <!-- By package: a second provider entry clashes with the Kit's in the manifest merger -->
+        <package android:name="com.fergusonconsultancy.foldwidgets" />
+    </queries>
+
     <application
         android:name=".SolcoApp"
         android:allowBackup="false"

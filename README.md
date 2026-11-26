@@ -32,6 +32,7 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 - **True moon phase** (on by default): at night the disc shows tonight's moon.
 - **Concentrato** (on by default): a fast fold leaves the bands emptier for a moment, read from the hinge sensor.
 - **Touch:** grain yields under a finger and springs back.
+- **Copertina** (Half by default): while music plays, the grain and the disc take the colours of the sleeve, each grain keeping its finish's lightness, and return to the finish when it stops. The two colours come from Fold Widgets, which reads the artwork; only the colours cross. Settings has A touch, Half, Full or Off, and Show me plays five made-up sleeves on the preview.
 
 ## Finishes
 

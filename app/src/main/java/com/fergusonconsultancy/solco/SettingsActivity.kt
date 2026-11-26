@@ -141,6 +141,8 @@ class SettingsActivity : Activity() {
         screen.add(Card(this).apply { row(placeRow) }, px(16))
         // Concentrato and its choices; Show me plays a fast fold on the wallpaper above
         screen.add(concentratoCard("A fast fold leaves the bands emptier for a moment, then they fill back in.") { showFlick() }, px(16))
+        // Copertina (26 Nov 2026): the sleeve's colours while music plays; Show me plays five made-up sleeves
+        screen.add(copertinaCard { showSleeves() }, px(16))
 
         // Sipario, the second wallpaper in this app
         screen.section("Also here")
@@ -208,6 +210,23 @@ class SettingsActivity : Activity() {
         while (v.parent is View && v.parent !is android.widget.ScrollView) { top += v.top; v = v.parent as View }
         (v.parent as? android.widget.ScrollView)?.let { sv -> if (sv.scrollY > top) { sv.smoothScrollTo(0, (top - px(24)).coerceAtLeast(0)); preview.postDelayed({ preview.flick() }, 380); return } }
         preview.flick()
+    }
+
+    /** Five made-up sleeves on the preview, 2.4 s each, then back to what is really playing. */
+    private fun showSleeves() {
+        val step = 2400L
+        Copertina.SAMPLES.forEachIndexed { i, pal ->
+            preview.postDelayed({
+                Copertina.sample = pal
+                Copertina.until = System.currentTimeMillis() + step + 200L
+                preview.rebuild()
+            }, i * step)
+        }
+        preview.postDelayed({ Copertina.sample = null; preview.rebuild() }, Copertina.SAMPLES.size * step + 250L)
+        var v: View = preview
+        var top = 0
+        while (v.parent is View && v.parent !is android.widget.ScrollView) { top += v.top; v = v.parent as View }
+        (v.parent as? android.widget.ScrollView)?.let { sv -> if (sv.scrollY > top) sv.smoothScrollTo(0, (top - px(24)).coerceAtLeast(0)) }
     }
 
     private fun pickStyle(s: Style) {

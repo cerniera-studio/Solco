@@ -174,6 +174,17 @@ public class SolcoWallpaperService extends WallpaperService {
             return k != null && k.isKeyguardLocked();
         }
 
+        /** Copertina: the sleeve changed (or the music stopped). The renderer reads the colours again on refresh. */
+        private final BroadcastReceiver copertina = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) {
+                GLView v = view;
+                if (v == null) return;
+                v.queueEvent(() -> renderer.refresh());
+                v.requestRender();
+            }
+        };
+
         private final BroadcastReceiver clock = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent i) {
@@ -307,6 +318,9 @@ public class SolcoWallpaperService extends WallpaperService {
                 // Sveglia is another app, so this one is exported; it only carries the dawn's progress
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION), Context.RECEIVER_EXPORTED);
                 else c.registerReceiver(dawn, new IntentFilter(DawnGlow.ACTION));
+                // Copertina (26 Nov 2026): Fold Widgets says the sleeve's colours changed; only ever a re-read
+                if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(copertina, new IntentFilter(Copertina.CHANGED), Context.RECEIVER_EXPORTED);
+                else c.registerReceiver(copertina, new IntentFilter(Copertina.CHANGED));
                 tiltSensor(true);
             } else {
                 try {
@@ -319,6 +333,10 @@ public class SolcoWallpaperService extends WallpaperService {
                 }
                 try {
                     c.unregisterReceiver(dawn);
+                } catch (IllegalArgumentException ignored) {
+                }
+                try {
+                    c.unregisterReceiver(copertina);
                 } catch (IllegalArgumentException ignored) {
                 }
                 tiltSensor(false);
