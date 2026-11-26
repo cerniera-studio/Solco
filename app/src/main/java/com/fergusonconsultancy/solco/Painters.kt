@@ -45,12 +45,13 @@ object Backdrop {
  * like light on a curved surface.
  */
 object DiscPainter {
-    fun paint(f: Finish, sky: SkyState, luna: Boolean, rad: Float, dp: Float): Bitmap {
+    /** [tint]: the live wallpaper and its preview take Copertina's colours; the Settings tiles never do. */
+    fun paint(f: Finish, sky: SkyState, luna: Boolean, rad: Float, dp: Float, tint: Boolean = false): Bitmap {
         val s = ceil(rad * 2 + 4).toInt().coerceAtLeast(4)
         val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
         val g = Canvas(b)
         val k = s / 2f
-        val col = if (sky.day) f.discDay else f.discNight
+        val col = if (tint) Copertina.disc(f, sky.day) else if (sky.day) f.discDay else f.discNight
         val dim = if (sky.day) 1f else .82f
         val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         val circle = RectF(k - rad, k - rad, k + rad, k + rad)
@@ -137,7 +138,7 @@ class ScenePainter {
     private val paint = Paint().apply { strokeCap = Paint.Cap.SQUARE }
 
     fun draw(cv: Canvas, s: Scene, f: Finish, back: Bitmap, disc: Bitmap?, dx: Float, dy: Float, dot: Float,
-             sparks: List<FloatArray> = emptyList(), spark: Bitmap? = null) {
+             sparks: List<FloatArray> = emptyList(), spark: Bitmap? = null, tint: Boolean = false) {
         cv.drawBitmap(back, 0f, 0f, null)
         if (buf[0].size < s.n * 2) buf = Array(6) { FloatArray(s.n * 2) }
         cnt.fill(0)
@@ -151,7 +152,7 @@ class ScenePainter {
         paint.strokeWidth = dot
         for (bi in 0 until 6) {
             if (cnt[bi] == 0) continue
-            paint.color = withAlpha(f.grain[bi / 2], f.grainA * (if (bi % 2 == 1) .25f else 1f))
+            paint.color = withAlpha(if (tint) Copertina.grain(f, bi / 2) else f.grain[bi / 2], f.grainA * (if (bi % 2 == 1) .25f else 1f))
             cv.drawPoints(buf[bi], 0, cnt[bi], paint)
         }
         if (disc != null) cv.drawBitmap(disc, dx - disc.width / 2f, dy - disc.height / 2f, null)

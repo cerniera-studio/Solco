@@ -9,6 +9,11 @@
     <!-- Pioggia (24 Nov 2026): the weather from Open-Meteo. Granted at install; no prompt -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Copertina (26 Nov 2026): the sleeve's colours, shared by Fold Widgets -->
+    <queries>
+        <provider android:authorities="com.cerniera.copertina" />
+    </queries>
+
     <application
         android:name=".SolcoApp"
         android:allowBackup="false"
