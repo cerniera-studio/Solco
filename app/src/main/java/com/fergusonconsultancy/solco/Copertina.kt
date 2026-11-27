@@ -83,7 +83,8 @@ object Copertina {
     fun disc(f: Finish, day: Boolean): Int {
         val base = if (day) f.discDay else f.discNight
         val p = colours ?: return base
-        return CopertinaRules.tint(base, p[0], amount * .8f)
+        // At night the moon takes less of the sleeve (27 Nov: it read too bright and too mint)
+        return CopertinaRules.tint(base, p[0], amount * if (day) .8f else .45f)
     }
 
     /**
