@@ -56,7 +56,8 @@ object DiscPainter {
         val g = Canvas(b)
         val k = s / 2f
         if (glow != null) {
-            val a = Copertina.amount * (if (sky.day) .62f else .42f)
+            // 27 Nov: the moon's lens was too bright at night; it glows at about half the sun's
+            val a = Copertina.amount * (if (sky.day) .62f else .28f)
             val R = rad * reach
             val edge = rad / R
             g.drawCircle(k, k, R, Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -121,7 +122,7 @@ object DiscPainter {
         g.restore()
         // The lens's rim: a fine line of the sleeve's colour where the lamp meets the glass
         if (glow != null) g.drawCircle(k, k, rad, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE; strokeWidth = max(1f, 1.4f * dp); color = withAlpha(glow, .55f * Copertina.amount)
+            style = Paint.Style.STROKE; strokeWidth = max(1f, 1.4f * dp); color = withAlpha(glow, (if (sky.day) .55f else .32f) * Copertina.amount)
         })
         return b
     }
