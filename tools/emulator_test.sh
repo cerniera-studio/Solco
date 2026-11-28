@@ -156,9 +156,20 @@ for _ in range(8):
 print(";".join(out))
 PY
 )
-EXTRA="<string name=\"charges\">${WEEK%;}</string><string name=\"wx\">$WX</string><string name=\"trail_c\">$TRAIL</string>"
+# Orma: a day's steps so far (a walk to the station, lunch, a run for the train), minute by minute
+STEPDAY=$(python3 -c "import datetime; print((datetime.date.today() - datetime.date(1970, 1, 1)).days)")
+STEPMIN=$(python3 - <<'PY'
+out = []
+# Fixed times, so a run near midnight still has a day to draw (prints ahead of now count as the last hour's)
+for (a, b, spm) in [(490, 511, 110), (750, 772, 104), (1025, 1034, 150), (1034, 1050, 108)]:
+    for t in range(a, b): out.append(f"{t}:{spm}")
+for t in range(540, 1020, 31): out.append(f"{t}:45")
+print(";".join(out))
+PY
+)
+EXTRA="<string name=\"charges\">${WEEK%;}</string><string name=\"wx\">$WX</string><string name=\"trail_c\">$TRAIL</string><long name=\"steps_day\" value=\"$STEPDAY\" /><string name=\"steps_min\">$STEPMIN</string>"
 adb shell wm size 1080x2520; sleep 2
-for st in POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO ORMA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 8
@@ -182,7 +193,7 @@ adb shell wm size reset
 
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in SOLCO TRONCO MAREA DUNA POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in SOLCO TRONCO MAREA DUNA POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO ORMA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9

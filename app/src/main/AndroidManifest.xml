@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Pioggia (24 Nov 2026): the weather from Open-Meteo. Granted at install; no prompt -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Orma (27 Nov 2026): today's steps from the phone's own step counter. Asked for only when Orma is chosen; kept on the phone -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
 
     <!-- Copertina (26 Nov 2026): the sleeve's colours, shared by Fold Widgets -->
     <queries>

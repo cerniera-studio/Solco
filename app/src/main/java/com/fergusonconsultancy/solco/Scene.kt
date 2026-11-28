@@ -46,6 +46,11 @@ class Scene(
     private val charges: FloatArray = FloatArray(0),
     /** Deserto: the time's shape, to stand behind the crest (see [ClockPaint]); without it, no clock. */
     private val clock: ClockMask? = null,
+    /** Orma: today's steps, one value a minute from midnight (see [Steps]), and the minute it is now. */
+    private val walk: FloatArray = FloatArray(0),
+    private val walkNow: Int = 0,
+    /** Orma: the day, so each day's walk wanders its own way and keeps it all day. */
+    private val walkDay: Long = 0L,
 ) {
     val cover: Boolean = coverOverride ?: FoldWatch.tall(w, h)
     /**
@@ -105,6 +110,15 @@ class Scene(
     private var deserSky = FloatArray(0)
     private var deserCell = 1f
 
+    /**
+     * Orma: how many steps each print stands for on this screen, and how many prints were laid, for
+     * Settings. Declared before [n], because laying the grain sets them.
+     */
+    var perPrint = 0
+        private set
+    var prints = 0
+        private set
+
     val n: Int = when (style) {
         Style.SOLCO -> genSolco()
         Style.TRONCO -> genTronco()
@@ -116,6 +130,7 @@ class Scene(
         Style.STAGIONE -> genStagione()
         Style.SENTIERO -> genSentiero()
         Style.DESERTO -> genDeserto()
+        Style.ORMA -> genOrma()
     }.also { k ->
         if (turned) for (i in 0 until k) { val x = hx[i]; val y = hy[i]; hx[i] = sx(x, y); hy[i] = sy(x, y) }
     }
@@ -809,6 +824,173 @@ class Scene(
         if (uy > 1e-5f) t = min(t, (gh - y) / uy)
         if (uy < -1e-5f) t = min(t, -y / uy)
         return t
+    }
+
+    // ---- Orma: today's steps, a trail of footprints pressed into the sand ----
+    /**
+     * The walk's line on the upright glass: in from the bottom edge, then sweeping side to side up
+     * the glass as a walk along a beach does, each day its own way. Points every dp.
+     */
+    private fun ormaLine(): Pair<FloatArray, FloatArray> {
+        val rng = Rng((walkDay % 2_000_000L).toInt() + 17)
+        val top = gh * .07f; val bot = gh * .95f
+        val rows = max(2, ((bot - top) / (118f * dp)).toInt())
+        val sp = (bot - top) / rows
+        var side = if (rng.next() < .5f) 0 else 1
+        val px = ArrayList<Float>(); val py = ArrayList<Float>()
+        px += gw * (.34f + .32f * rng.next()); py += gh + 30f * dp
+        var y = bot
+        for (i in 0..rows) {
+            // Each sweep reaches its own distance across, so the turns never line up
+            val reachOut = .06f + .22f * rng.next()
+            px += gw * (if (side == 0) reachOut else 1f - reachOut); py += y + (rng.next() - .5f) * sp * .4f
+            if (i < rows) { px += gw * (.36f + .28f * rng.next()); py += y - sp * (.35f + .3f * rng.next()) }
+            side = side xor 1; y -= sp
+        }
+        // Catmull-Rom through the points, sampled about every dp
+        val ox = ArrayList<Float>(); val oy = ArrayList<Float>()
+        val n = px.size
+        for (i in 0 until n - 1) {
+            val i0 = max(0, i - 1); val i3 = min(n - 1, i + 2)
+            val seg = hypot(px[i + 1] - px[i], py[i + 1] - py[i])
+            val k = max(2, (seg / dp).toInt())
+            for (q in 0 until k) {
+                val t = q / k.toFloat(); val t2 = t * t; val t3 = t2 * t
+                fun cr(a: Float, b: Float, c: Float, d: Float) = .5f * (2f * b + (-a + c) * t + (2f * a - 5f * b + 4f * c - d) * t2 + (-a + 3f * b - 3f * c + d) * t3)
+                ox += cr(px[i0], px[i], px[i + 1], px[i3]); oy += cr(py[i0], py[i], py[i + 1], py[i3])
+            }
+        }
+        ox += px[n - 1]; oy += py[n - 1]
+        return ox.toFloatArray() to oy.toFloatArray()
+    }
+
+    /**
+     * The hollow of one footprint in its own frame, in units of about a dp: [u] forward, [v] to the
+     * right, [out] +1 for a right foot (its outer edge to the right). A heel, a broad ball, the outer
+     * edge joining them with the arch lifted on the inside, and five toes, the big toe inside.
+     */
+    private fun footAt(u: Float, v: Float, out: Float): Float {
+        fun ell(cu: Float, cv: Float, ru: Float, rv: Float): Float {
+            val a = (u - cu) / ru; val b = (v - cv) / rv
+            return ((1f - (a * a + b * b)) * 2.2f).coerceIn(0f, 1f)
+        }
+        var h = max(ell(-5f, .15f * out, 2.5f, 2.2f), ell(1.2f, -.35f * out, 2.9f, 3f))
+        h = max(h, ell(-1.9f, 1.55f * out, 3.6f, .95f))
+        h = max(h, .9f * ell(5.15f, -1.75f * out, 1.2f, 1.2f))
+        h = max(h, .9f * ell(5.55f, -.25f * out, .78f, .78f))
+        h = max(h, .9f * ell(5.3f, .85f * out, .7f, .7f))
+        h = max(h, .9f * ell(4.85f, 1.8f * out, .64f, .64f))
+        h = max(h, .9f * ell(4.2f, 2.6f * out, .58f, .58f))
+        return h
+    }
+
+    /**
+     * Orma (27 Nov 2026). Today's steps pressed into smooth, wind-rippled sand as a trail of
+     * footprints, one print for every [perPrint] steps, laid in the order they were walked along a
+     * line that enters at the bottom of the glass and sweeps up it. The stride follows the pace
+     * (a stroll short, brisk walking long, a run longest and dug in at the toes); after a quarter of
+     * an hour still, the feet stand side by side before the trail goes on. Prints older than an hour
+     * are softened by the wind, the last hour's rims wear the accent, and the low sun lights each
+     * hollow's far wall. The trail stops where you are now; ahead of it the sand is untouched.
+     */
+    private fun genOrma(): Int {
+        val (lx, ly) = ormaLine()
+        val m = lx.size
+        val len = FloatArray(m)
+        for (i in 1 until m) len[i] = len[i - 1] + hypot(lx[i] - lx[i - 1], ly[i] - ly[i - 1])
+        // Each print: arc length, foot (+1 right, -1 left), age in hours, a run, and whether it stands beside the last
+        val ps = ArrayList<FloatArray>()
+        fun lay(per: Float): Float {
+            ps.clear()
+            var acc = 0f; var s = 20f * dp; var last = -999; var foot = 1f
+            for (t in walk.indices) {
+                val spm = walk[t]
+                if (spm <= 0f) continue
+                acc += spm
+                while (acc >= per) {
+                    acc -= per
+                    val stride = (if (spm < 60f) 26f else if (spm < 100f) 33f else if (spm < 130f) 37f else 47f) * dp
+                    if (last >= 0 && t - last > 15 && ps.isNotEmpty()) {
+                        val p = ps[ps.size - 1]
+                        ps += floatArrayOf(p[0], -p[1], p[2], 0f, 1f)
+                        s += 22f * dp
+                    }
+                    s += stride
+                    ps += floatArrayOf(s, foot, (walkNow - t) / 60f, if (spm >= 130f) 1f else 0f, 0f)
+                    foot = -foot; last = t
+                }
+            }
+            return s
+        }
+        var per = 100f
+        if (walk.isNotEmpty()) while (lay(per) > len[m - 1] - 10f * dp && per < 20_000f) per += 50f
+        perPrint = per.toInt(); prints = ps.size
+
+        val cell = dp
+        val cw = (gw / cell).toInt() + 2; val ch = (gh / cell).toInt() + 2
+        val hol = FloatArray(cw * ch); val fresh = FloatArray(cw * ch); val push = FloatArray(cw * ch)
+        val big = 2f
+        var seg = 0
+        for (p in ps) {
+            while (seg < m - 2 && len[seg + 1] < p[0]) seg++
+            val x = lx[seg]; val y = ly[seg]
+            val a = kotlin.math.atan2(ly[seg + 1] - y, lx[seg + 1] - x)
+            val foot = p[1]; val age = p[2]; val run = p[3] > .5f
+            val depth = .55f + .45f * exp(-age.coerceAtLeast(0f) / 10f)
+            val recent = age < 1f
+            val ca = cos(a); val sa = sin(a)
+            // The foot sits to its own side of the line, turned out a little, as feet are
+            val fx = x - sa * 6.5f * dp * foot; val fy = y + ca * 6.5f * dp * foot
+            val turn = .09f * foot; val ct = cos(turn); val st = sin(turn)
+            val reachR = 9f * big * dp
+            val i0 = ((fx - reachR) / cell).toInt().coerceAtLeast(0); val i1 = ((fx + reachR) / cell).toInt().coerceAtMost(cw - 1)
+            val j0 = ((fy - reachR) / cell).toInt().coerceAtLeast(0); val j1 = ((fy + reachR) / cell).toInt().coerceAtMost(ch - 1)
+            for (j in j0..j1) for (i in i0..i1) {
+                val dx = (i + .5f) * cell - fx; val dy = (j + .5f) * cell - fy
+                val u0 = (dx * ca + dy * sa) / (dp * big); val v0 = (-dx * sa + dy * ca) / (dp * big)
+                val u = u0 * ct + v0 * st; val v = -u0 * st + v0 * ct
+                var hh = footAt(u, v, foot) * depth
+                // A run lands on the forefoot: the heel barely down, sand thrown up behind the ball
+                if (run) hh *= ((u + 6f) / 5f).coerceIn(.25f, 1f)
+                if (hh <= 0f) continue
+                val q = j * cw + i
+                if (hh > hol[q]) hol[q] = hh
+                if (recent && hh > fresh[q]) fresh[q] = hh
+                val pu = (u + .6f) / 1.6f; val pv = v / 3.6f
+                push[q] += exp(-(pu * pu + pv * pv)) * (if (run) .55f else .25f) * depth
+            }
+        }
+        // The rim: a little wider than the hollow, less the hollow itself
+        val broad = blur(hol.copyOf(), cw, ch, 1)
+        val broadF = blur(fresh.copyOf(), cw, ch, 1)
+        // The low light, from the side the sun or moon is on: the hollow's far wall catches it
+        val soft = blur(hol.copyOf(), cw, ch, 1)
+        val morning = (skyAt?.minutes ?: 600) < 720
+        val lxd = if (morning) .8f else -.8f; val lyd = .6f
+        val rng = Rng(149)
+        var k = 0; var guard = 0
+        while (k < cap && guard < cap * 40) {
+            guard++
+            val x = rng.next() * gw; val y = rng.next() * gh
+            val ci = (x / cell).toInt().coerceIn(1, cw - 2); val cj = (y / cell).toInt().coerceIn(1, ch - 2)
+            val q = cj * cw + ci
+            val ho = hol[q]
+            val rim = (broad[q] * 2.4f - ho * 1.5f + push[q] * .4f).coerceIn(0f, 1f)
+            val rimF = (broadF[q] * 2.4f - fresh[q] * 1.5f).coerceIn(0f, 1f)
+            val gxh = (soft[q + 1] - soft[q - 1]) * .5f; val gyh = (soft[q + cw] - soft[q - cw]) * .5f
+            val lit = ((gxh * lxd + gyh * lyd) * 4f).coerceIn(-1f, 1f)
+            // The sand itself: fine ripples smoothed by the wind, quiet enough for a print to read
+            val ph = ((y + 4f * dp * sin(x / (70f * dp)) + 2f * dp * sin(x / (23f * dp) + 1f)) / (11f * dp)) % 1f
+            val ripple = if (ph < .7f) (ph / .7f).pow(1.4f) else (1f - (ph - .7f) / .3f).pow(2.6f)
+            val open = 1f - ho
+            val dens = (.15f + .11f * ripple) * open * open * open + .015f * ho +
+                1.15f * rim * open * (1f - .6f * (-lit).coerceIn(0f, 1f)) + .75f * lit.coerceIn(0f, 1f) * ho
+            if (rng.next() > dens) continue
+            val c = if (rimF > .2f && lit > -.2f) 1 else if (rim > .2f || lit > .3f || ripple > .75f) 0 else 2
+            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
+            k++
+        }
+        return k
     }
 
     // ---- Sentiero: raked gravel, worn by the day's touches ----

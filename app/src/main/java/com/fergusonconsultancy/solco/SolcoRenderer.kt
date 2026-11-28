@@ -91,6 +91,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         // Stagione moves on a day at midnight; Sentiero is raked again then, and relaid as the trail grows
         if ((s.style == Style.STAGIONE || s.style == Style.SENTIERO) && LocalDate.now() != builtDay) dirtyBuild = true
         if (s.style == Style.SENTIERO && Trail.version != builtTrail && !tracking) dirtyBuild = true
+        // Orma: a new day smooths the sand; new steps press new prints (relaid on the minute, never mid-step)
+        if (s.style == Style.ORMA && (LocalDate.now() != builtDay || Steps.count(ctx) / 25 != builtSteps / 25)) dirtyBuild = true
         // Deserto: a new minute while the clock shows
         if (s.style == Style.DESERTO && (locked || preview) && builtMinute != minuteNow()) dirtyBuild = true
         // Pioggia: a new reading of the weather
@@ -171,6 +173,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     /** What the last build was laid from: Pioggia's reading and Sentiero's trail. */
     @Volatile private var builtWx = 0L
     @Volatile private var builtTrail = -1
+    @Volatile private var builtSteps = -1
 
     /** Polvere: how long the phone lay untouched, applied once the grain for this screen is in place. */
     private var pendingRest = 0L
@@ -205,15 +208,17 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val wx = if (style == Style.PIOGGIA) Weather.now(ctx) else null
                 builtWx = wx?.at ?: 0L
                 builtTrail = Trail.version
+                builtSteps = if (style == Style.ORMA) Steps.count(ctx) else -1
                 builtCopertina = Copertina.read(ctx)
                 // Deserto: the clock is laid every time, so it is there the moment the phone locks
                 builtMinute = minuteNow()
                 val clk = if (style == Style.DESERTO) ClockPaint.mask(ctx, bw, bh, dp, FoldWatch.tall(bw, bh)) else null
                 val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
-                    sky = if (style == Style.POLVERE || style == Style.DESERTO) Sky.now(Prefs.notturno(ctx)) else null, clock = clk,
+                    sky = if (style == Style.POLVERE || style == Style.DESERTO || style == Style.ORMA) Sky.now(Prefs.notturno(ctx)) else null, clock = clk,
                     charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0),
                     weather = wx, season = if (style == Style.STAGIONE) Seasons.now() else null,
-                    trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0))
+                    trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0),
+                    walk = if (style == Style.ORMA) Steps.today(ctx) else FloatArray(0), walkNow = Steps.nowMinute(), walkDay = LocalDate.now().toEpochDay())
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
                     val c = Copertina.grain(f, sc.col[i].toInt())
@@ -290,6 +295,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (s.style == Style.POLVERE && (kotlin.math.abs(sky.alt - s.skyAlt) > .04f || sky.shown != s.skyShown)) dirtyBuild = true
         // Deserto: relit when the light crosses to the other side at noon, or night falls or lifts
         if (s.style == Style.DESERTO && ((sky.minutes < 720) != s.litMorning || !sky.day != s.atNight)) dirtyBuild = true
+        // Orma: the prints are lit from the other side once the sun passes noon
+        if (s.style == Style.ORMA && (sky.minutes < 720) != s.litMorning) dirtyBuild = true
         disc = s.disc(sky)
         shown = sky.shown
         val bmp = DiscPainter.paint(finish, sky, Prefs.luna(ctx), disc[2], s.dp, tint = true)

@@ -52,6 +52,32 @@ public class SolcoWallpaperService extends WallpaperService {
         }
     };
 
+    /**
+     * Orma's record: the phone's step counter, heard for as long as Solco is set and physical
+     * activity is allowed. The hardware counts on its own and hands over its total in batches
+     * (at most every five minutes), so listening costs next to nothing.
+     */
+    private final SensorEventListener stepListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent e) {
+            if (e.values.length > 0) Steps.reading(SolcoWallpaperService.this, e.values[0], e.timestamp);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor s, int accuracy) {
+        }
+    };
+    private boolean counting;
+
+    /** Starts the step counter once it is allowed; safe to call often. */
+    void countSteps() {
+        if (counting || !Steps.INSTANCE.allowed(this)) return;
+        Sensor s = Steps.INSTANCE.sensor(this);
+        SensorManager sm = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (s == null || sm == null) return;
+        counting = sm.registerListener(stepListener, s, SensorManager.SENSOR_DELAY_NORMAL, 300_000_000);
+    }
+
     /** Polvere: when the wallpaper was last hidden, so its return knows how long the phone lay still. */
     static long hiddenAt = 0L;
 
@@ -67,11 +93,18 @@ public class SolcoWallpaperService extends WallpaperService {
         else registerReceiver(plug, f);
         kotlin.Pair<Float, Boolean> p = Power.INSTANCE.read(this);
         Charges.reconcile(this, p.getFirst(), p.getSecond());
+        countSteps();
     }
 
     @Override
     public void onDestroy() {
         handler.removeCallbacks(growth);
+        if (counting) {
+            SensorManager sm = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+            if (sm != null) sm.unregisterListener(stepListener);
+            counting = false;
+        }
+        Steps.save(this);
         try {
             unregisterReceiver(plug);
         } catch (IllegalArgumentException ignored) {
@@ -289,6 +322,8 @@ public class SolcoWallpaperService extends WallpaperService {
                 final long rest = hiddenAt > 0L ? android.os.SystemClock.elapsedRealtime() - hiddenAt : 0L;
                 if (rest > 0L) view.queueEvent(() -> renderer.rest(rest));
                 listen(true);
+                // Orma: physical activity may have been allowed in Settings since the service began
+                countSteps();
                 final boolean locked = keyguardLocked();
                 view.queueEvent(() -> { renderer.locked(locked); renderer.refresh(); });
                 arrive();
@@ -297,6 +332,7 @@ public class SolcoWallpaperService extends WallpaperService {
                 hiddenAt = android.os.SystemClock.elapsedRealtime();
                 // Sentiero's trail, written once on the way out of sight rather than on every touch
                 Trail.INSTANCE.save(SolcoWallpaperService.this);
+                Steps.save(SolcoWallpaperService.this);
                 listen(false);
                 view.onPause();
             }

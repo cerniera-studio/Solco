@@ -49,6 +49,8 @@ enum class Style(val title: String, val note: String) {
     SENTIERO("Sentiero", "Raked gravel worn by your hand: each touch on the home screen today presses a hollow, each swipe drags a path, and the last hour's banks wear the accent. At midnight it is raked again. Kept on the phone."),
     // 25 Nov 2026: from claude/deserto-design.md
     DESERTO("Deserto", "One great dune across the crease, lit from the side the sun or moon is on. While the phone is locked the time stands in the sky behind its crest, as a depth effect does; hide One UI's own clock to see it alone."),
+    // 27 Nov 2026: from the holding basket (App Ideas 25 Nov)
+    ORMA("Orma", "Today's steps, pressed into the sand as a trail of footprints from the bottom of the glass. Brisk walking lengthens the stride, a run digs in the toes, and where you stood still the feet rest side by side. The morning's prints soften in the wind; the last hour's wear the accent. At midnight the sand is smooth again."),
 }
 
 /**
