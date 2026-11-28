@@ -98,7 +98,7 @@ sleep 1.5
 adb exec-out screencap -p > shot-settings-scrolled.png
 
 # The Fold's main screen at its real size: Solco centred on the crease, in Notte
-prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">NOTTE</string>"
+prefs "<string name=\"style\">ORBITA</string><string name=\"finish\">NOTTE</string>"
 adb shell wm size 2256x2504   # the Fold 8 Ultra main screen, as Diagnostics reported it
 sleep 3
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
@@ -106,9 +106,9 @@ sleep 15
 adb exec-out screencap -p > shot-preview-main.png
 adb shell wm size reset
 
-# 11 Nov 2026: the new styles in every finish on the cover's shape, Marea at 35% and charging, Duna tilted
+# 11 Nov 2026: the new styles in every finish on the cover's shape, Marea at 35% and charging (Duna retired 28 Nov)
 adb shell wm size 1080x2520; sleep 2
-for st in SOLCO MAREA DUNA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
+for st in ORBITA MAREA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 8
@@ -123,18 +123,10 @@ adb shell dumpsys battery set status 2; adb shell dumpsys battery set ac 1; slee
 adb exec-out screencap -p > shot-marea-35-charging.png
 adb shell dumpsys battery reset
 adb shell input keyevent KEYCODE_BACK; sleep 1
-prefs "<string name=\"style\">DUNA</string><string name=\"finish\">TABACCO</string>"
-adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
-sleep 8; adb exec-out screencap -p > shot-duna-level.png
-adb emu sensor set acceleration 6.5:4.0:6.0; sleep 5
-adb exec-out screencap -p > shot-duna-tilted.png
-adb emu sensor set acceleration 0:9.81:0.5; sleep 6
-adb exec-out screencap -p > shot-duna-after.png
-adb shell input keyevent KEYCODE_BACK; sleep 1
 adb shell wm size reset
 
-# 21 Nov 2026: Polvere and Delta in every finish on the cover's shape, with Verderame. Delta is given a
-# week of charges; Polvere is left still for a while and woken.
+# 21 Nov 2026: Delta in every finish on the cover's shape, with Verderame. Delta is given a week of
+# charges. (Polvere, alongside it then, was retired on 28 Nov 2026.)
 # 24 Nov 2026: Nebulosa gave way to Pioggia, Stagione and Sentiero. Pioggia is given a fresh reading of
 # steady rain (so it does not wait on the network), Sentiero a day's touches on the cover.
 NOW=$(date +%s%3N)
@@ -143,7 +135,8 @@ for d in 6.6:0.62 5.7:0.55 4.4:0.18 3.6:0.70 2.7:0.48 1.6:0.66 0.5:0.58; do
   age=${d%%:*}; gain=${d##*:}
   WEEK="$WEEK$(python3 -c "print(int($NOW - $age * 86400000))"):$gain;"
 done
-WX="2.2:0:63:95:7:250:$(date +%s)"
+# 28 Nov 2026: a strong south-westerly (a plume on Deserto, softened prints on Orma) and 14 mm fallen today (puddles)
+WX="2.2:0:63:95:13:250:$(date +%s):14"
 TRAIL=$(python3 - "$NOW" <<'PY'
 import sys, random
 now = int(sys.argv[1]); random.seed(7); out = []
@@ -156,9 +149,20 @@ for _ in range(8):
 print(";".join(out))
 PY
 )
-EXTRA="<string name=\"charges\">${WEEK%;}</string><string name=\"wx\">$WX</string><string name=\"trail_c\">$TRAIL</string>"
+# Orma: a day's steps so far (a walk to the station, lunch, a run for the train), minute by minute
+STEPDAY=$(python3 -c "import datetime; print((datetime.date.today() - datetime.date(1970, 1, 1)).days)")
+STEPMIN=$(python3 - <<'PY'
+out = []
+# Fixed times, so a run near midnight still has a day to draw (prints ahead of now count as the last hour's)
+for (a, b, spm) in [(490, 511, 110), (750, 772, 104), (1025, 1034, 150), (1034, 1050, 108)]:
+    for t in range(a, b): out.append(f"{t}:{spm}")
+for t in range(540, 1020, 31): out.append(f"{t}:45")
+print(";".join(out))
+PY
+)
+EXTRA="<string name=\"charges\">${WEEK%;}</string><string name=\"wx\">$WX</string><string name=\"trail_c\">$TRAIL</string><long name=\"steps_day\" value=\"$STEPDAY\" /><string name=\"steps_min\">$STEPMIN</string>"
 adb shell wm size 1080x2520; sleep 2
-for st in POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in DELTA PIOGGIA STAGIONE SENTIERO DESERTO ORMA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 8
@@ -174,15 +178,11 @@ prefs "<string name=\"style\">PIOGGIA</string><string name=\"finish\">CARBONIO</
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
 sleep 8; adb exec-out screencap -p > shot-pioggia-storm.png
 adb shell input keyevent KEYCODE_BACK; sleep 1
-prefs "<string name=\"style\">POLVERE</string><string name=\"finish\">TABACCO</string>"
-adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
-sleep 8; adb exec-out screencap -p > shot-polvere-preview.png
-adb shell input keyevent KEYCODE_BACK; sleep 1
 adb shell wm size reset
 
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in SOLCO TRONCO MAREA DUNA POLVERE DELTA PIOGGIA STAGIONE SENTIERO DESERTO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in DELTA DESERTO MAREA ORBITA ORMA PIOGGIA SENTIERO STAGIONE TRONCO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9

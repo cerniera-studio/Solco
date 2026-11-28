@@ -41,6 +41,9 @@ class SettingsActivity : Activity() {
     private lateinit var placeValue: TextView
     private lateinit var troncoCard: View
     private lateinit var troncoCount: TextView
+    private lateinit var ormaCard: View
+    private lateinit var ormaRow: Row
+    private lateinit var ormaValue: TextView
     private lateinit var lunaNote: TextView
     private lateinit var action: TextView
     private lateinit var diag: TextView
@@ -88,7 +91,7 @@ class SettingsActivity : Activity() {
 
         // Style: each one a different force. Rows of two, each large enough to read its grain
         screen.section("Style")
-        Style.values().toList().chunked(2).forEachIndexed { r, pair ->
+        Style.values().sortedBy { it.title }.chunked(2).forEachIndexed { r, pair ->
             val styleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             pair.forEachIndexed { i, s ->
                 val t = PictureTile(this, s.title, Prefs.style(this) == s, 168,
@@ -96,7 +99,7 @@ class SettingsActivity : Activity() {
                 styleTiles += s to t
                 styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
             }
-            // Ten styles, two by two
+            // Nine styles, two by two, in alphabetical order
             if (pair.size < 2) styleRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = px(12) })
             screen.add(styleRow, if (r > 0) px(14) else 0)
         }
@@ -110,9 +113,15 @@ class SettingsActivity : Activity() {
         }
         screen.add(troncoCard, px(16))
 
+        // Orma's steps, only when Orma is chosen: allow the counter, then today's count and what a print stands for
+        ormaValue = endValue("", Kit.CHAMPAGNE)
+        ormaRow = Row(this, "Today's steps", "", ormaValue) { askSteps() }
+        ormaCard = Card(this).apply { row(ormaRow) }
+        screen.add(ormaCard, px(16))
+
         // Finish: rows of three
         screen.section("Finish")
-        Finish.values().toList().chunked(3).forEachIndexed { r, trio ->
+        Finish.values().sortedBy { it.title }.chunked(3).forEachIndexed { r, trio ->
             val finishRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             trio.forEachIndexed { i, f ->
                 val t = PictureTile(this, f.title, Prefs.finish(this) == f, 132,
@@ -120,7 +129,7 @@ class SettingsActivity : Activity() {
                 finishTiles += f to t
                 finishRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(10) })
             }
-            // Seven finishes: the last row keeps the tiles' width
+            // Seven finishes, in alphabetical order: the last row keeps the tiles' width
             repeat(3 - trio.size) { finishRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = px(10) }) }
             screen.add(finishRow, if (r > 0) px(12) else 0)
         }
@@ -160,6 +169,7 @@ class SettingsActivity : Activity() {
         window.decorView.setBackgroundColor(Kit.GROUND)
         stage.record(root, preview, action)
         syncTronco()
+        syncOrma()
     }
 
     override fun onResume() {
@@ -173,6 +183,7 @@ class SettingsActivity : Activity() {
         showPlace()
         if (Sky.hasLocation(this)) Sky.follow(this) { moved -> showPlace(); if (moved) repaintAll() }
         syncTronco()
+        syncOrma()
         fillDiag()
     }
 
@@ -199,6 +210,8 @@ class SettingsActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_PLACE) { showPlace(); Sky.follow(this) { moved -> showPlace(); if (moved) repaintAll() } }
+        // The wallpaper starts counting the next time it comes into view
+        if (requestCode == REQ_STEPS) { syncOrma(); preview.rebuild() }
     }
 
     private val version by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?" }
@@ -236,6 +249,9 @@ class SettingsActivity : Activity() {
         finishTiles.forEach { (_, t) -> t.refresh(t.chosen, true) }
         styleNote.text = s.note
         syncTronco()
+        syncOrma()
+        // Orma needs the step counter: ask the first time it is chosen
+        if (s == Style.ORMA && !Steps.allowed(this) && Steps.sensor(this) != null) askSteps()
         preview.rebuild(); preview.stir(1)
     }
 
@@ -261,6 +277,40 @@ class SettingsActivity : Activity() {
         if (on) { val n = Growth.days(this); troncoCount.text = if (n == 1) "1 day" else "$n days" }
     }
 
+    private fun syncOrma() {
+        val on = Prefs.style(this) == Style.ORMA
+        ormaCard.visibility = if (on) View.VISIBLE else View.GONE
+        if (!on) return
+        when {
+            Steps.sensor(this) == null -> { ormaValue.text = "No counter"; ormaRow.setSub("This phone has no step counter, so the sand stays smooth. The picture above is a sample day.") }
+            !Steps.allowed(this) -> { ormaValue.text = "Allow"; ormaRow.setSub("Allow physical activity so your steps can press the sand. Counted on the phone by its own step counter; nothing leaves it. Until then the picture above is a sample day.") }
+            else -> {
+                val n = Steps.count(this)
+                ormaValue.text = "%,d".format(n)
+                fun say(per: Int) = ormaRow.setSub(if (n == 0) "Counting from when it was allowed; the trail begins with your next steps. Until then the picture above is a sample day."
+                    else "Each print is about $per steps on this screen. Counted as long as Solco is your wallpaper, whichever style is showing.")
+                say(100)
+                if (n > 0) {
+                    // What a print stands for depends on how much of the walk fits this screen: worked out away from the screen's thread
+                    val b = windowManager.currentWindowMetrics.bounds
+                    val dp = resources.displayMetrics.density
+                    Thread {
+                        val per = runCatching {
+                            Scene(b.width(), b.height(), dp, Style.ORMA, FloatArray(0), walk = Steps.today(this),
+                                walkNow = Steps.nowMinute(), walkDay = java.time.LocalDate.now().toEpochDay()).perPrint
+                        }.getOrDefault(100)
+                        runOnUiThread { if (Prefs.style(this) == Style.ORMA && Steps.allowed(this)) say(per) }
+                    }.start()
+                }
+            }
+        }
+    }
+
+    private fun askSteps() {
+        if (Steps.allowed(this) || Steps.sensor(this) == null) return
+        requestPermissions(arrayOf(android.Manifest.permission.ACTIVITY_RECOGNITION), REQ_STEPS)
+    }
+
     private fun fillDiag() {
         val p = Prefs.of(this)
         val hinge = p.contains("hinge_sensor").let { has ->
@@ -278,6 +328,7 @@ class SettingsActivity : Activity() {
             "GPU: " + (Gpu.get(this, "gpu") ?: "not seen yet"),
             "GPU problem: " + (Gpu.get(this, "gl_error") ?: "none"),
             "Tronco record began: " + Growth.start(this),
+            "Step counter: " + (if (Steps.sensor(this) == null) "absent" else if (Steps.allowed(this)) "allowed, ${Steps.count(this)} steps today" else "present, not allowed"),
             "Version: $version",
         ).joinToString("\n")
     }
@@ -293,12 +344,13 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val REQ_PLACE = 7
+        private const val REQ_STEPS = 8
         /** How Solco answers each principle, under the doctrine at the foot of Settings. */
         val DOCTRINE_NOTES = listOf(
             "The monolithic membrane" to "The grain is one body: a finger pushes the grain under it, and the grain around it yields and follows, then everything springs home.",
             "Concentrato" to "A fast fold leaves the bands emptier for a moment, so only the swing's trajectory reads; they fill back in as the grain settles.",
             "Giulietta" to "Nothing on the wallpaper is a control. The sun or moon, the battery's tide and the day's ring are read from the grain itself.",
-            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery, a tilt, the weather or picking the phone up moves something.",
+            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery, the weather or a step moves something.",
         )
     }
 }

@@ -18,13 +18,13 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** The ground, and for Solco the fine grooves of the inner field, kept faint so widgets stay legible. */
+/** The ground, and for Orbita the fine grooves of the inner field, kept faint so widgets stay legible. */
 object Backdrop {
     fun paint(s: Scene, f: Finish): Bitmap {
         val b = Bitmap.createBitmap(s.w, s.h, Bitmap.Config.ARGB_8888)
         val c = Canvas(b)
         c.drawColor(f.ground or 0xFF000000.toInt())
-        if (s.style == Style.SOLCO) {
+        if (s.style == Style.ORBITA) {
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = max(1f, .6f * s.dp) }
             val rng = Rng(11)
             var rr = s.r * .06f

@@ -71,15 +71,20 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
         val dp = resources.displayMetrics.density
         val (lvl, chg) = Power.read(context)
         val sky = Sky.now(Prefs.notturno(context), Notturno.previewAt)
-        val s = Scene(width, height, dp, style, if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
+        val rg = if (style == Style.TRONCO) Growth.rings(context) else FloatArray(0)
+        val s = Scene(width, height, dp, style, rg, level = lvl, charging = chg, rotation = rotation,
+            ringHours = if (style == Style.TRONCO) Growth.hours(context, rg.size) else emptyArray(),
             sky = sky, charges = if (style == Style.DELTA) Charges.channels(context) else FloatArray(0),
-            weather = if (style == Style.PIOGGIA) Weather.now(context) else null,
+            weather = if (style.readsWeather) Weather.now(context) else null,
             season = if (style == Style.STAGIONE) Seasons.now() else null,
             trail = if (style == Style.SENTIERO) Trail.points(context, FoldWatch.tall(width, height)) else FloatArray(0),
-            // Deserto: the preview always shows the clock, as the lock screen will
-            clock = if (style == Style.DESERTO) ClockPaint.mask(context, width, height, dp, FoldWatch.tall(width, height)) else null)
+            // Orma: today's steps so far; before any are counted, the sample day, so the style can be seen
+            walk = if (style == Style.ORMA) ormaWalk(context) else FloatArray(0),
+            walkNow = if (style == Style.ORMA && Steps.count(context) == 0) Steps.SAMPLE_NOW else Steps.nowMinute(),
+            walkDay = java.time.LocalDate.now().toEpochDay(),
+            gusts = if (style == Style.ORMA) (if (Steps.count(context) == 0) Gusts.sample() else Gusts.today(context)) else FloatArray(0))
         // Pioggia: a fresh reading if one is due, then the rain as it is now
-        if (style == Style.PIOGGIA && Weather.due(context)) Weather.fetch(context) { post { if (Prefs.style(context) == Style.PIOGGIA) rebuild() } }
+        if (style.readsWeather && Weather.due(context)) Weather.fetch(context) { post { if (Prefs.style(context).readsWeather) rebuild() } }
         back?.recycle(); disc?.recycle(); spark?.recycle()
         Copertina.read(context)
         back = Backdrop.paint(s, finish)
@@ -93,8 +98,6 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
 
     fun stir(dir: Int) {
         scene?.stir(dir, false, false, SystemClock.uptimeMillis())
-        // Polvere: as if picked up after a while lying still, so the lift can be seen here
-        scene?.settle(.6f)
         invalidate()
     }
 
@@ -166,20 +169,23 @@ class PictureTile(
     }
 }
 
+/** Orma's preview: today's steps, or the sample day until the counter has counted any. */
+fun ormaWalk(c: Context): FloatArray = if (Steps.count(c) > 0) Steps.today(c) else Steps.sample()
+
 /** A still of a style in a finish, as a miniature of the cover screen, for the tiles. */
 fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) {
     val dp = c.resources.displayMetrics.density * .5f
     val rings = if (style == Style.TRONCO) Growth.sample(30) else FloatArray(0)
     val sky = Sky.now(Prefs.notturno(c), Notturno.previewAt)
     val s = Scene(w, h, dp, style, rings, coverOverride = true, level = Power.read(c).first,
+        ringHours = if (style == Style.TRONCO) Growth.sampleHours(rings.size) else emptyArray(),
         sky = sky, charges = if (style == Style.DELTA) Charges.sample() else FloatArray(0),
         // The tiles show a plausible case of each force, as Delta's shows a sample week
-        weather = if (style == Style.PIOGGIA) Wx.SAMPLE else null,
+        weather = if (style.readsWeather) Wx.SAMPLE else null,
         season = if (style == Style.STAGIONE) Seasons.now() else null,
         trail = if (style == Style.SENTIERO) Trail.sample() else FloatArray(0),
-        clock = if (style == Style.DESERTO) ClockPaint.mask(c, w, h, dp, true) else null)
-    // Polvere's tile shows some dust on the floor, as after a while lying still
-    s.settle(.4f)
+        walk = if (style == Style.ORMA) Steps.sample() else FloatArray(0), walkNow = Steps.SAMPLE_NOW, walkDay = 3L,
+        gusts = if (style == Style.ORMA) Gusts.sample() else FloatArray(0))
     val back = Backdrop.paint(s, f)
     val d = s.disc(sky)
     val disc = if (sky.shown) DiscPainter.paint(f, sky, Prefs.luna(c), d[2], dp) else null
