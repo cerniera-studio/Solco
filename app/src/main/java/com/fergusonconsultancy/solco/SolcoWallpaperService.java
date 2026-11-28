@@ -156,7 +156,7 @@ public class SolcoWallpaperService extends WallpaperService {
         /** Pioggia: asks for the weather while it is on screen, at most every 20 minutes (see [Weather]). */
         private void weather() {
             Context c = SolcoWallpaperService.this;
-            if (view == null || !visible || Prefs.INSTANCE.style(c) != Style.PIOGGIA || !Weather.INSTANCE.due(c)) return;
+            if (view == null || !visible || !Prefs.INSTANCE.style(c).getReadsWeather() || !Weather.INSTANCE.due(c)) return;
             Weather.INSTANCE.fetch(c, changed -> {
                 GLView v = view;
                 if (v != null) { v.queueEvent(() -> renderer.refresh()); v.requestRender(); }

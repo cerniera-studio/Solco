@@ -111,10 +111,13 @@ object FoldWatch {
 
 /**
  * Tronco's record: minutes of unfolded use per day, sampled once a minute while the screen is on
- * and the main screen was the last to arrive. Kept on the phone, never sent anywhere.
+ * and the main screen was the last to arrive. Kept on the phone, never sent anywhere. Since
+ * 28 Nov 2026 each day also keeps its minutes hour by hour, so a ring's grain is dense where the
+ * day was busy and pale where it was quiet.
  */
 object Growth {
     private const val KEY = "growth"
+    private const val HOURS = "growth_h"
     private const val START = "growth_start"
 
     @JvmStatic fun start(c: Context): LocalDate {
@@ -133,8 +136,42 @@ object Growth {
         val map = read(p.getString(KEY, "") ?: "")
         val today = LocalDate.now().toString()
         map[today] = (map[today] ?: 0) + 1
-        p.edit().putString(KEY, write(map)).apply()
+        val hrs = readHours(p.getString(HOURS, "") ?: "")
+        val day = hrs.getOrPut(today) { IntArray(24) }
+        day[LocalTime.now().hour]++
+        p.edit().putString(KEY, write(map)).putString(HOURS, writeHours(hrs)).apply()
     }
+
+    /**
+     * Each ring's day, hour by hour: minutes of unfolded use in each of its 24 hours, aligned with
+     * [rings]. Null for a day from before the hours were kept (it keeps the old pale-to-dense ring).
+     */
+    fun hours(c: Context, n: Int): Array<FloatArray?> {
+        val today = LocalDate.now()
+        val from = today.minusDays((n - 1).toLong())
+        val hrs = readHours(Prefs.of(c).getString(HOURS, "") ?: "")
+        return Array(n) { i -> hrs[from.plusDays(i.toLong()).toString()]?.let { a -> FloatArray(24) { a[it].toFloat() } } }
+    }
+
+    /** For the tile: invented days with a morning, a lunchtime and an evening of use. */
+    fun sampleHours(days: Int): Array<FloatArray?> {
+        val rng = Rng(67)
+        return Array(days) { FloatArray(24) { h -> if (h in 7..8 || h in 12..13 || h in 19..22) 20f + 40f * rng.next() else if (h in 9..18) 6f * rng.next() else 0f } }
+    }
+
+    private fun readHours(s: String): MutableMap<String, IntArray> {
+        val m = HashMap<String, IntArray>()
+        for (kv in s.split(';')) {
+            val i = kv.indexOf('=')
+            if (i <= 0) continue
+            val v = kv.substring(i + 1).split(',').map { it.toIntOrNull() ?: 0 }
+            if (v.size == 24) m[kv.substring(0, i)] = v.toIntArray()
+        }
+        return m
+    }
+
+    private fun writeHours(m: Map<String, IntArray>) =
+        m.entries.sortedBy { it.key }.takeLast(420).joinToString(";") { "${it.key}=${it.value.joinToString(",")}" }
 
     /** Width of each ring from the first day to today; today's is still growing. */
     fun rings(c: Context): FloatArray {

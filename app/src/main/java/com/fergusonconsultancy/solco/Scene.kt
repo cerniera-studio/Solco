@@ -17,7 +17,7 @@ import kotlin.math.sqrt
  *
  * Rings centre on the hinge: the left edge of the tall cover screen, the crease of the main one.
  *
- * Both screens, both ways round (12 Nov 2026). Solco and Tronco answer to the hinge, which
+ * Both screens, both ways round (12 Nov 2026). Orbita and Tronco answer to the hinge, which
  * stays where it is on the glass when the phone turns, so they are laid out the right way up for
  * the glass and then turned with it: on the cover held sideways, the hinge runs along the bottom
  * (or the top). Marea answers to gravity, so its water always fills from the bottom of the view.
@@ -36,7 +36,7 @@ class Scene(
     rotation: Int = 0,
     /** The sky: the sun or moon that lights Deserto and Orma, and Notturno's night. */
     sky: SkyState? = null,
-    /** Pioggia: the weather outside now; without it, an overcast haze. */
+    /** Pioggia: the weather outside now; without it, an overcast haze. Deserto and Orma read its wind. */
     private val weather: Wx? = null,
     /** Stagione: the year's daylight here, one value a day, and today. */
     private val season: Season? = null,
@@ -49,6 +49,10 @@ class Scene(
     private val walkNow: Int = 0,
     /** Orma: the day, so each day's walk wanders its own way and keeps it all day. */
     private val walkDay: Long = 0L,
+    /** Tronco: each ring's day hour by hour, minutes of use (see [Growth.hours]); null keeps the old ring. */
+    private val ringHours: Array<FloatArray?> = emptyArray(),
+    /** Orma: how hard the real wind worked the sand in each of today's hours (see [Gusts]). */
+    private val gusts: FloatArray = FloatArray(0),
 ) {
     val cover: Boolean = coverOverride ?: FoldWatch.tall(w, h)
     /**
@@ -92,10 +96,31 @@ class Scene(
     /** Deserto: whether the dune was lit from the left (the morning) and by night, so the renderer knows when to relight it. */
     val litMorning: Boolean = (sky?.minutes ?: 600) < 720
     val atNight: Boolean = sky?.day == false
+    /** Stagione: how much of today's daylight the ray was filled to, so the renderer refills it as the day goes. */
+    var stagioneFill = -1f
+        private set
+    /** Deserto: the light's height the dune was lit for, so the renderer relights it as the sun climbs or sinks. */
+    val litAlt: Float = sky?.alt ?: -1f
     private val skyAt: SkyState? = sky
     /** Deserto: the skyline, to set the sun or moon above it. Declared before [n], because laying the grain sets it. */
     private var deserSky = FloatArray(0)
     private var deserCell = 1f
+
+    /**
+     * While the phone charges (28 Nov 2026), the newest channel runs: grain is carried down its trunk
+     * from the hinge, quickest mid-stream and slowest by the banks, and new grain enters at the
+     * hinge as the old leaves the glass. Like Marea's breathing, it is the only motion allowed
+     * without a touch or a fold, because the phone is on the plug; unplugged, the channel is still.
+     */
+    private val flowing = charging && style == Style.DELTA
+    /** The running channel's trunk on the upright glass, x, y and half-width every 2 dp, and its length. */
+    private var trunk = FloatArray(0)
+    private var trunkLen = 0f
+    /** The running grain: which grain, where along the trunk, and where across it (-1 to 1). */
+    private var flowIdx = IntArray(0)
+    private var flowS = FloatArray(0)
+    private var flowV = FloatArray(0)
+    private var flowT = 0L
 
     /**
      * Orma: how many steps each print stands for on this screen, and how many prints were laid, for
@@ -107,7 +132,7 @@ class Scene(
         private set
 
     val n: Int = when (style) {
-        Style.SOLCO -> genSolco()
+        Style.ORBITA -> genOrbita()
         Style.TRONCO -> genTronco()
         Style.MAREA -> genMarea()
         Style.DELTA -> genDelta()
@@ -153,8 +178,8 @@ class Scene(
     var breathing = charging && style == Style.MAREA
     private var breathT0 = 0L
 
-    // ---- Solco: bands of grain round the hinge, densest towards each band's outer edge ----
-    private fun genSolco(): Int {
+    // ---- Orbita (the Solco style until 28 Nov 2026): bands of grain round the hinge, densest towards each band's outer edge ----
+    private fun genOrbita(): Int {
         val bands = if (cover) arrayOf(
             floatArrayOf(.40f, .52f, .55f, 0f), floatArrayOf(.58f, .74f, .9f, 1f),
             floatArrayOf(.79f, .86f, .6f, 2f), floatArrayOf(.90f, 1.02f, 1f, 0f))
@@ -190,6 +215,12 @@ class Scene(
     }
 
     // ---- Tronco: one ring per day, its width that day's use; the bark closes the newest ring ----
+    /**
+     * Since 28 Nov 2026 a ring's grain follows its day: across the ring from the inside out runs the
+     * day from midnight to midnight (today's, to now), and the grain is dense in the hours the phone
+     * was open and pale in the quiet ones, as a busy season lays dense wood. A fine line still closes
+     * each ring, so the rings read apart.
+     */
     private fun wob(a: Float, rr: Float) =
         1f + .028f * sin(3 * a + rr / (r * .2f)) + .018f * sin(7 * a + 1.7f) + .01f * sin(13 * a + rr / (r * .05f))
 
@@ -221,9 +252,23 @@ class Scene(
                 var lo = 0; var hi = days.size
                 while (hi - lo > 1) { val m = (lo + hi) ushr 1; if (edges[m] <= rr) lo = m else hi = m }
                 val t = (rr - edges[lo]) / (edges[lo + 1] - edges[lo])
-                val late = if (t > .8f) ((t - .8f) / .2f).pow(.7f) else 0f
-                dens = .10f + .85f * late
-                c = if (late > .3f) 0 else if (rng.next() < .8f) 1 else 2
+                val hrs = if (rings.isEmpty()) null else ringHours.getOrNull(lo)
+                if (hrs != null && hrs.size == 24) {
+                    // Today's ring has only reached now; earlier rings span the whole day
+                    val span = if (lo == days.size - 1) (java.time.LocalTime.now().toSecondOfDay() / 3600f).coerceAtLeast(.5f) else 24f
+                    val hf = (t * span).coerceIn(0f, 23.999f)
+                    val h0 = hf.toInt(); val h1 = min(23, h0 + 1); val f = hf - h0
+                    var peak = 1f; for (v in hrs) if (v > peak) peak = v
+                    // Smoothly between hours, so the wood has no steps
+                    val use = ((hrs[h0] * (1f - f) + hrs[h1] * f) / peak).coerceIn(0f, 1f)
+                    val close = if (t > .94f) ((t - .94f) / .06f).pow(.7f) else 0f
+                    dens = .07f + .62f * use.pow(.8f) + .7f * close
+                    c = if (close > .3f || use > .7f) 0 else if (rng.next() < .8f) 1 else 2
+                } else {
+                    val late = if (t > .8f) ((t - .8f) / .2f).pow(.7f) else 0f
+                    dens = .10f + .85f * late
+                    c = if (late > .3f) 0 else if (rng.next() < .8f) 1 else 2
+                }
             }
             if (rng.next() > dens) continue
             hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
@@ -244,7 +289,9 @@ class Scene(
         val lay = DesertoLayout(w, h, cover)
         val minutes = skyAt?.minutes ?: 600
         val night = skyAt?.day == false
-        val dune = Dune(w, h, cover, lay, minutes < 720)
+        // The light's real height: the Sky's 0 to 1 scaled back to degrees for this latitude
+        val topDeg = min(90f, 90f - abs(Sky.place.lat.toFloat()) + 23.44f + (if (night) 5f else 0f))
+        val dune = Dune(w, h, cover, lay, minutes < 720, (skyAt?.alt ?: .12f).coerceIn(0f, 1f) * topDeg)
         val cell = 2f * dp
         val cw = (w / cell).toInt() + 1; val ch = (h / cell).toInt() + 1
         val light = FloatArray(cw * ch) { -1f }
@@ -299,7 +346,49 @@ class Scene(
             hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
             k++
         }
-        return k
+        return k + desertoPlume(k, skyline, cell, cw, lay)
+    }
+
+    /**
+     * Deserto's plume (28 Nov 2026): the real wind outside, from Pioggia's reading, lifting sand off the
+     * crest. Its part across the view sets the side it streams to (east to the right, as on a map) and,
+     * past about 5 m/s, when dry sand starts to move, its strength and reach. Stippled from the
+     * silhouette downwind, densest at the lip and thinning as it rises and spreads, so the crest
+     * smokes the way a real dune does. A calm day, or no reading, leaves the crest clean.
+     */
+    private fun desertoPlume(from: Int, skyline: FloatArray, cell: Float, cw: Int, lay: DesertoLayout): Int {
+        val wx = weather ?: return 0
+        if (wx.precip > .2f) return 0 // wet sand does not blow
+        val across = -sin(Math.toRadians(wx.dir.toDouble())).toFloat() * wx.wind
+        val strength = ((abs(across) - 5f) / 9f).coerceIn(0f, 1f)
+        if (strength <= 0f) return 0
+        val side = if (across > 0f) 1f else -1f
+        val reach = w * (.10f + .30f * strength)
+        val rise = 34f * dp * (.5f + strength)
+        val rng = Rng(173)
+        var k = from
+        val room = min(cap, from + (cap * .12f * (.35f + .65f * strength)).toInt())
+        var tries = (room - from) * 6
+        val span = (lay.horizon - lay.sy).coerceAtLeast(1f)
+        while (k < room && tries-- > 0) {
+            val x0 = rng.next() * w
+            val sk = skyline[(x0 / cell).toInt().coerceIn(0, cw - 1)]
+            // Only the dune's upper silhouette smokes, the summit most
+            val crest = ((lay.horizon - sk) / span).coerceIn(0f, 1f)
+            if (rng.next() > crest * crest) continue
+            val t = rng.next().pow(1.5f)
+            if (rng.next() > (1f - t) * .8f) continue
+            val x = x0 + side * t * reach
+            val spread = (2f + 22f * t) * dp
+            // Lifted off the lip and carried out level, sagging a little as the wind lets it go
+            val y = sk - 1.2f * dp - rise * (1.6f * t - .7f * t * t) + (rng.next() - .5f) * spread
+            if (x < 0f || x >= w || y < 0f) continue
+            // Above the sand it lands over, never through it
+            if (y > skyline[(x / cell).toInt().coerceIn(0, cw - 1)] - .8f * dp) continue
+            hx[k] = x; hy[k] = y; col[k] = (if (t < .35f) 0 else 2).toByte(); hash[k] = rng.next()
+            k++
+        }
+        return k - from
     }
 
     /** Deserto: where the sky meets the sand, column by column, to set the sun or moon above it. */
@@ -317,6 +406,10 @@ class Scene(
      * dry sky is a haze as heavy as its cloud, thickest at the top. Where drops land, rings on the
      * floor. In a thunderstorm, one fork in the accent. Laid out by gravity, like Marea, so the rain
      * falls down the view whichever way the phone is held; east is to the right, as on a map.
+     *
+     * Puddles (28 Nov 2026): the floor holds as much standing water as has fallen here since midnight.
+     * A damp morning leaves a few small pools; a wet day joins them into a sheet. They stay after the
+     * rain stops, still and level, and dry away at midnight.
      */
     private fun genPioggia(): Int {
         val wx = weather ?: Wx.OVERCAST
@@ -395,6 +488,8 @@ class Scene(
                 }
             }
         }
+        // Puddles: today's rain so far, lying on the floor as level water
+        if (wx.today > .2f) k = pioggiaPuddles(k, wx.today, snowy)
         // A thunderstorm: one fork of lightning in the accent
         if (wx.code >= 95) {
             var x = w * (.3f + .4f * rng.next()); var y = 0f
@@ -402,6 +497,51 @@ class Scene(
                 val nx = x + (rng.next() - .5f) * 60f * dp; val ny = y + (20f + 30f * rng.next()) * dp
                 for (j in 0 until 40) { val t = j / 40f; if (!put(x + (nx - x) * t, y + (ny - y) * t, 1)) return k }
                 x = nx; y = ny
+            }
+        }
+        return k
+    }
+
+    /**
+     * Pioggia's puddles. [mm] of rain today sets how full the floor is: from a few pools near 1 mm to
+     * one sheet across the floor past about 20 mm. Water is drawn as a mirror would show it, in level
+     * strokes, faint inside and catching the light along the far rim. Seeded on their own, so the pools
+     * keep their places as the day's reading changes and only grow.
+     */
+    private fun pioggiaPuddles(from: Int, mm: Float, snowy: Boolean): Int {
+        if (snowy) return from // under snow the water lies hidden
+        val full = (kotlin.math.ln(1f + mm) / kotlin.math.ln(21f)).coerceIn(0f, 1f)
+        val rng = Rng(127)
+        val floor = h * .93f
+        var k = from
+        val room = min(cap, from + (cap * .10f).toInt())
+        val pools = 3 + (w / (120f * dp)).toInt()
+        val line = 2.2f * dp
+        for (p in 0 until pools) {
+            val cx0 = (p + .2f + .6f * rng.next()) / pools * w
+            val cy0 = floor + (.25f + .55f * rng.next()) * (h - floor)
+            val seed = rng.next()
+            // Each pool has a threshold: the first fill on a damp day, the rest as the day grows wetter
+            val own = ((full - seed * .55f) / (1f - seed * .55f)).coerceIn(0f, 1f)
+            if (own <= 0f) continue
+            // Past about two thirds full the pools widen until they meet
+            val half = (26f + 80f * own) * dp * (if (full > .66f) 1f + (full - .66f) * 4.5f else 1f)
+            val tall = half * .16f
+            var y = cy0 - tall
+            while (y < cy0 + tall) {
+                val v = (y - cy0) / tall
+                val span = half * sqrt((1f - v * v).coerceAtLeast(0f)) * (1f + .06f * sin(y / (7f * dp) + seed * 9f))
+                var x = cx0 - span
+                while (x < cx0 + span) {
+                    if (k >= room) return k
+                    // Level strokes with gaps, as a mirror breaks the light; the far rim brightest
+                    val rim = v < -.7f
+                    if (rng.next() < (if (rim) .85f else .38f) && x >= 0f && x < w && y < h) {
+                        hx[k] = x; hy[k] = y; col[k] = (if (rim) 0 else 2).toByte(); hash[k] = rng.next(); k++
+                    }
+                    x += (if (rim) .9f else 1.6f) * dp
+                }
+                y += line
             }
         }
         return k
@@ -415,9 +555,15 @@ class Scene(
      * goes once round the crease, January at the top. Days gone are dense, days to come faint, today's
      * ray is the accent; a hair of bare sand marks each month. Each ray reaches its share of the way
      * to the edge of the glass, so the year fills the screen whatever its shape.
+     *
+     * Today's ray fills as the real daylight passes (28 Nov 2026): at sunrise only its faint outline
+     * is laid, the accent climbs out from the hinge through the day, and at sunset the ray is whole.
      */
     private fun genStagione(): Int {
         val se = season ?: Season.EVEN
+        val now = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+        val fill = if (season == null) 1f else se.passed(now)
+        stagioneFill = fill
         val days = se.daylight
         val nd = days.size.coerceAtLeast(1)
         var most = 0f
@@ -459,7 +605,11 @@ class Scene(
             val fade = .25f + .75f * t * sqrt(t)
             val dens: Float; val c: Int
             when {
-                d == se.today -> { dens = .95f * (.4f + .6f * across * across); c = 1 }
+                d == se.today -> {
+                    // Lit as far as the day has gone; beyond that, the outline of a day to come
+                    if (rr <= inner + (len[d] - inner) * fill) { dens = .95f * (.4f + .6f * across * across); c = 1 }
+                    else { dens = .30f * spine * fade + (if (tip) .45f else 0f) * (.3f + .7f * across); c = 1 }
+                }
                 d < se.today -> { dens = .85f * spine * fade + (if (tip) .55f else 0f) * (.3f + .7f * across); c = if (tip || rng.next() < .85f) 0 else 2 }
                 else -> { dens = .30f * spine * fade + (if (tip) .30f else 0f) * (.3f + .7f * across); c = 2 }
             }
@@ -546,9 +696,11 @@ class Scene(
      * footprints, one print for every [perPrint] steps, laid in the order they were walked along a
      * line that enters at the bottom of the glass and sweeps up it. The stride follows the pace
      * (a stroll short, brisk walking long, a run longest and dug in at the toes); after a quarter of
-     * an hour still, the feet stand side by side before the trail goes on. Prints older than an hour
-     * are softened by the wind, the last hour's rims wear the accent, and the low sun lights each
-     * hollow's far wall. The trail stops where you are now; ahead of it the sand is untouched.
+     * an hour still, the feet stand side by side before the trail goes on. The prints are softened by
+     * the real wind (28 Nov 2026): each by as much as today's wind has blown over it since it was made
+     * (see [Gusts]), so a still day keeps the morning crisp and a gale fills it in by lunch. The last
+     * hour's rims wear the accent, and the low sun lights each hollow's far wall. The trail stops where
+     * you are now; ahead of it the sand is untouched.
      */
     private fun genOrma(): Int {
         val (lx, ly) = ormaLine()
@@ -593,7 +745,7 @@ class Scene(
             val x = lx[seg]; val y = ly[seg]
             val a = kotlin.math.atan2(ly[seg + 1] - y, lx[seg + 1] - x)
             val foot = p[1]; val age = p[2]; val run = p[3] > .5f
-            val depth = .55f + .45f * exp(-age.coerceAtLeast(0f) / 10f)
+            val depth = .45f + .55f * exp(-blown(walkNow - age * 60f, walkNow.toFloat()))
             val recent = age < 1f
             val ca = cos(a); val sa = sin(a)
             // The foot sits to its own side of the line, turned out a little, as feet are
@@ -648,6 +800,21 @@ class Scene(
             k++
         }
         return k
+    }
+
+    /** Orma: the wind's work on the sand between two minutes of today, in e-folds (see [Gusts.rate]). */
+    private fun blown(fromMin: Float, toMin: Float): Float {
+        if (toMin <= fromMin) return 0f
+        if (gusts.size < 24) return (toMin - fromMin) / 600f // no record: the old ten-hour softening
+        var e = 0f
+        var m = fromMin.coerceAtLeast(0f)
+        while (m < toMin) {
+            val h = (m / 60f).toInt().coerceIn(0, 23)
+            val end = min(toMin, (h + 1) * 60f)
+            e += gusts[h] * (end - m) / 60f
+            m = end
+        }
+        return e
     }
 
     // ---- Sentiero: raked gravel, worn by the day's touches ----
@@ -772,6 +939,7 @@ class Scene(
             stack.clear()
             stack += floatArrayOf(gcx + (if (axis == 0f) 1f else -1f) * dp, gcy + (rng.next() - .5f) * gh * .55f, axis + (rng.next() - .5f) * .7f, w0, 0f)
             val isNew = j == newest
+            val path = if (isNew && flowing) ArrayList<Float>() else null
             var budget = 4000
             while (stack.isNotEmpty() && budget > 0) {
                 val b = stack.removeAt(stack.size - 1)
@@ -781,6 +949,7 @@ class Scene(
                     if (x < 0f || y < 0f || x >= gw || y >= gh) break
                     // Meanders, drawn back towards the way away from the hinge
                     a += (rng.next() - .5f) * .24f + kotlin.math.atan2(sin(axis - a), cos(axis - a)) * .025f
+                    if (path != null && depth == 0) { path += x; path += y; path += wd }
                     // Stamp the channel and its banks into the field
                     val reach = wd + 5f * dp
                     val i0 = ((x - reach) / cell).toInt().coerceAtLeast(0); val i1 = ((x + reach) / cell).toInt().coerceAtMost(cw - 1)
@@ -798,11 +967,18 @@ class Scene(
                     }
                 }
             }
+            if (path != null && path.size >= 30) trunk = path.toFloatArray()
         }
+        trunkLen = (trunk.size / 3 - 1) * 2f * dp
+        // The running grain: about one per 2.5 dp² of the trunk's water, room kept for it before the sand is laid
+        var water = 0f
+        if (trunkLen > 0f) for (i in 0 until trunk.size / 3) water += trunk[3 * i + 2] * 2f * 2f * dp
+        val running = min(cap / 5, (water / (2.5f * dp * dp)).toInt())
+        val sand = cap - running
         val rng = Rng(97)
         var k = 0; var guard = 0
         val bank = 2.6f * dp
-        while (k < cap && guard < cap * 40) {
+        while (k < sand && guard < cap * 40) {
             guard++
             val x = rng.next() * gw; val y = rng.next() * gh
             val q = (y / cell).toInt().coerceIn(0, ch - 1) * cw + (x / cell).toInt().coerceIn(0, cw - 1)
@@ -819,7 +995,47 @@ class Scene(
             hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
             k++
         }
+        // The running grain, spread evenly along the trunk
+        if (running > 0) {
+            val want = min(cap - k, running)
+            val fr = Rng(211)
+            flowIdx = IntArray(want); flowS = FloatArray(want); flowV = FloatArray(want)
+            for (f in 0 until want) {
+                flowIdx[f] = k; flowS[f] = fr.next() * trunkLen; flowV[f] = (fr.next() * 2f - 1f) * .8f
+                col[k] = (if (fr.next() < .25f) 1 else 0).toByte(); hash[k] = fr.next()
+                placeFlow(f)
+                k++
+            }
+        }
         return k
+    }
+
+    /** Puts a running grain where it is along the trunk, on the upright glass (turned later with the rest). */
+    private fun placeFlow(f: Int) {
+        val m = trunk.size / 3
+        val p = (flowS[f] / (2f * dp)).coerceIn(0f, m - 1.001f)
+        val i = p.toInt(); val t = p - i
+        val x0 = trunk[3 * i]; val y0 = trunk[3 * i + 1]; val x1 = trunk[3 * i + 3]; val y1 = trunk[3 * i + 4]
+        val wd = trunk[3 * i + 2] * (1f - t) + trunk[3 * i + 5] * t
+        val dx = x1 - x0; val dy = y1 - y0; val l = hypot(dx, dy).coerceAtLeast(1e-3f)
+        val x = x0 + dx * t - dy / l * flowV[f] * wd; val y = y0 + dy * t + dx / l * flowV[f] * wd
+        val g = flowIdx[f]
+        hx[g] = x; hy[g] = y
+    }
+
+    /** Delta on charge: the running grain moves on down the trunk; what leaves the glass enters again at the hinge. */
+    private fun flow(now: Long) {
+        val dt = if (flowT == 0L) 0f else ((now - flowT) / 1000f).coerceAtMost(.1f)
+        flowT = now
+        // About 22 dp a second mid-stream, a third of that by the banks
+        val v0 = 22f * dp
+        for (f in flowIdx.indices) {
+            val v = flowV[f]
+            flowS[f] += v0 * (.33f + .67f * (1f - v * v)) * dt
+            if (flowS[f] >= trunkLen) flowS[f] -= trunkLen
+            placeFlow(f)
+            if (turned) { val g = flowIdx[f]; val x = hx[g]; val y = hy[g]; hx[g] = sx(x, y); hy[g] = sy(x, y) }
+        }
     }
 
     // ---- The disc rides a ring round the hinge: low at dawn and dusk, highest at noon ----
@@ -882,8 +1098,30 @@ class Scene(
         decay = linger
     }
 
+    /**
+     * Orbita's bow (28 Nov 2026). A held finger draws the nearby rings towards it: each grain within
+     * [bowReach] is led along its own ray from the hinge towards the finger's ring, most where it is
+     * nearest, so the bands bend round the fingertip rather than parting. Nothing is moved directly:
+     * the bow only sets where each grain's spring rests, eased in over about a fifth of a second and
+     * out over about a third, and the grain's own soft spring carries it there and back. The bow's
+     * centre trails the finger, so a drag sweeps the bend along the rings like a wake.
+     */
+    private val orbita = style == Style.ORBITA
+    private val bowReach = (if (cover) 180f else 230f) * dp
+    private var bowHeld = false
+    private var bow = 0f
+    private var bowX = 0f; private var bowY = 0f
+    private var bowTX = 0f; private var bowTY = 0f
+
     /** A finger: grain yields under it and is dragged a little with it; neighbours follow. */
     fun touch(x: Float, y: Float, down: Boolean) {
+        if (orbita) {
+            if (!down) { bowHeld = false; pressed = false; return }
+            if (!bowHeld && bow < .02f) { bowX = x; bowY = y }
+            bowTX = x; bowTY = y; bowHeld = true
+            pressed = true; lastX = x; lastY = y
+            return
+        }
         if (!down) { pressed = false; return }
         val rho = 64f * dp; val rho2 = rho * rho
         val mvx = if (pressed) x - lastX else 0f
@@ -910,6 +1148,21 @@ class Scene(
         val k = .010f * dt
         val damp = .915f.pow(dt)
         var energy = 0f
+        // Orbita's bow: its strength and centre ease towards the finger, never jumping
+        val bowing = orbita && (bowHeld || bow > .002f)
+        var bowF = 0f; var bowR2 = 1f; var bowRf = 0f
+        if (bowing) {
+            val inOut = 1f - exp(-dt * 16.67f / (if (bowHeld) 190f else 320f))
+            bow += ((if (bowHeld) 1f else 0f) - bow) * inOut
+            if (!bowHeld && bow < .002f) bow = 0f
+            val follow = 1f - exp(-dt * 16.67f / 70f)
+            bowX += (bowTX - bowX) * follow; bowY += (bowTY - bowY) * follow
+            // Smoothstep, so the bend gathers and lets go softly at both ends
+            bowF = bow * bow * (3f - 2f * bow)
+            bowR2 = bowReach * bowReach
+            bowRf = hypot(bowX - cx, bowY - cy)
+            energy = 1f
+        }
         for (i in 0 until n) {
             if (kick[i] != 0f) {
                 if (now >= kickAt[i]) {
@@ -920,8 +1173,21 @@ class Scene(
                 }
                 energy = 1f
             }
-            vx[i] = (vx[i] - ox[i] * k) * damp
-            vy[i] = (vy[i] - oy[i] * k) * damp
+            var tx = 0f; var ty = 0f
+            if (bowF > 0f) {
+                val dx = hx[i] - bowX; val dy = hy[i] - bowY
+                val d2 = dx * dx + dy * dy
+                if (d2 < bowR2) {
+                    val q = 1f - d2 / bowR2
+                    val rx = hx[i] - cx; val ry = hy[i] - cy
+                    val rg = hypot(rx, ry).coerceAtLeast(1f)
+                    // Towards the finger's ring, by up to about four fifths of the gap, never more than 56 dp
+                    val pull = ((bowRf - rg) * .8f * q * q * bowF).coerceIn(-56f * dp, 56f * dp)
+                    tx = rx / rg * pull; ty = ry / rg * pull
+                }
+            }
+            vx[i] = (vx[i] - (ox[i] - tx) * k) * damp
+            vy[i] = (vy[i] - (oy[i] - ty) * k) * damp
             ox[i] += vx[i] * dt; oy[i] += vy[i] * dt
             val e = abs(vx[i]) + abs(vy[i]) + (abs(ox[i]) + abs(oy[i])) * .01f
             if (e > energy) energy = e
@@ -930,6 +1196,8 @@ class Scene(
             if (energy < 1.2f * dp) empty *= decay.pow(dt)
             if (empty < .01f) empty = 0f
         }
+        // Delta on charge: the newest channel runs
+        if (flowing && flowIdx.isNotEmpty()) flow(now)
         // Marea on charge: the grain near the surface rises and falls on a slow swell
         if (breathing) {
             if (breathT0 == 0L) breathT0 = now
@@ -942,8 +1210,8 @@ class Scene(
                 oy[i] = 2.6f * dp * f * sin(t * 1.1f + hx[i] / (w * .18f)) + oy[i] * .2f
             }
         }
-        val moving = energy > .01f * dp || pressed || empty > 0f || breathing
-        if (!moving) last = 0L
+        val moving = energy > .01f * dp || pressed || empty > 0f || breathing || (flowing && flowIdx.isNotEmpty())
+        if (!moving) { last = 0L; flowT = 0L }
         return moving
     }
 

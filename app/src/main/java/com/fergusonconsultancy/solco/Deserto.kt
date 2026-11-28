@@ -41,7 +41,7 @@ class DesertoLayout(w: Int, h: Int, cover: Boolean) {
  * and the other the shade, the slip face at sand's angle of repose, wind ripples on the windward
  * face, low swells beyond, and a ripple field underfoot.
  */
-class Dune(w: Int, h: Int, cover: Boolean, val lay: DesertoLayout, morning: Boolean) {
+class Dune(w: Int, h: Int, cover: Boolean, val lay: DesertoLayout, morning: Boolean, elevDeg: Float = 7f) {
     val f = (if (cover) h else w) * .9f
     val eye = 1.6f
     private val z0 = 60f
@@ -49,13 +49,20 @@ class Dune(w: Int, h: Int, cover: Boolean, val lay: DesertoLayout, morning: Bool
     val hd = eye + (lay.horizon - lay.sy) * z0 / f
     private val lx = z0 * (w * (if (cover) .55f else .40f)) / f
     private val wind = if (morning) 1f else -1f
-    /** The light: low, from the left in the morning and the right after noon, a little towards us. */
+    /**
+     * The light: from the left in the morning and the right after noon, a little towards us, at the
+     * sun's (or moon's) real height (28 Nov 2026). A low light throws the slip face's shade long across
+     * the sand; as it climbs the shade draws in under the crest. Held between 4° and 32°: below 4° the
+     * dune would be all shade, and above about 32° the faces no longer read apart (checked on the JVM).
+     */
     private val lgx: Float; private val lgy: Float; private val lgz: Float
 
     init {
-        val x = if (morning) -.97f else .97f; val y = .12f; val z = -.22f
-        val n = sqrt(x * x + y * y + z * z)
-        lgx = x / n; lgy = y / n; lgz = z / n
+        val e = Math.toRadians(elevDeg.coerceIn(4f, 32f).toDouble())
+        val hx0 = if (morning) -.97f else .97f; val hz0 = -.22f
+        val hn = sqrt(hx0 * hx0 + hz0 * hz0)
+        val c = kotlin.math.cos(e).toFloat()
+        lgx = hx0 / hn * c; lgy = kotlin.math.sin(e).toFloat(); lgz = hz0 / hn * c
     }
 
     fun height(x: Float, z: Float): Float {

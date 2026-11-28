@@ -60,7 +60,7 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
   set -- $s
   name=$1
   shape "$2" "$3" "$4"
-  prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">VISCONTI</string><string name=\"sipario\">GOCCIA</string>"
+  prefs "<string name=\"style\">ORBITA</string><string name=\"finish\">VISCONTI</string><string name=\"sipario\">GOCCIA</string>"
   adb shell run-as $PKG rm -f files/layout.json
   adb shell am start -W -n $PKG/.SettingsActivity >/dev/null; sleep 6
   # The emulator sometimes ignores a rotation: ask again until the screen really is the right way round
@@ -95,7 +95,7 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
 done
 
 # Turning the cover is not a fold: with Solco in view, turn it both ways and back. No fold may be logged.
-prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">VISCONTI</string>"
+prefs "<string name=\"style\">ORBITA</string><string name=\"finish\">VISCONTI</string>"
 shape 823x1920 320 0
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
 sleep 9

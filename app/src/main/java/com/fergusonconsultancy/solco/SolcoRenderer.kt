@@ -90,11 +90,16 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (s.style == Style.TRONCO && (LocalDate.now() != builtDay || SystemClock.elapsedRealtime() - builtAt > 15 * 60_000L)) dirtyBuild = true
         // Stagione moves on a day at midnight; Sentiero is raked again then, and relaid as the trail grows
         if ((s.style == Style.STAGIONE || s.style == Style.SENTIERO) && LocalDate.now() != builtDay) dirtyBuild = true
+        // Stagione: today's ray refilled each time another 2% of the daylight has passed (about every quarter hour)
+        if (s.style == Style.STAGIONE && s.stagioneFill >= 0f) {
+            val m = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+            if (kotlin.math.abs(Seasons.now().passed(m) - s.stagioneFill) > .02f) dirtyBuild = true
+        }
         if (s.style == Style.SENTIERO && Trail.version != builtTrail && !tracking) dirtyBuild = true
         // Orma: a new day smooths the sand; new steps press new prints (relaid on the minute, never mid-step)
         if (s.style == Style.ORMA && (LocalDate.now() != builtDay || Steps.count(ctx) / 25 != builtSteps / 25)) dirtyBuild = true
         // Pioggia: a new reading of the weather
-        if (s.style == Style.PIOGGIA && (Weather.now(ctx)?.at ?: 0L) != builtWx) dirtyBuild = true
+        if (s.style.readsWeather && (Weather.now(ctx)?.at ?: 0L) != builtWx) dirtyBuild = true
         // Copertina: the sleeve's colours (or the strength) changed since the grain was coloured
         if (Copertina.read(ctx) != builtCopertina) { dirtyBuild = true; dirtySky = true }
         // Delta's channels silt up as they age: carved again once an hour at most
@@ -185,17 +190,20 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 val (lvl, chg) = Power.read(ctx)
                 builtLevel = lvl
                 builtCharging = chg
-                val wx = if (style == Style.PIOGGIA) Weather.now(ctx) else null
+                val wx = if (style.readsWeather) Weather.now(ctx) else null
                 builtWx = wx?.at ?: 0L
                 builtTrail = Trail.version
                 builtSteps = if (style == Style.ORMA) Steps.count(ctx) else -1
                 builtCopertina = Copertina.read(ctx)
-                val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
+                val rg = if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0)
+                val sc = Scene(bw, bh, dp, style, rg, level = lvl, charging = chg, rotation = rotation,
+                    ringHours = if (style == Style.TRONCO) Growth.hours(ctx, rg.size) else emptyArray(),
                     sky = if (style == Style.DESERTO || style == Style.ORMA) Sky.now(Prefs.notturno(ctx)) else null,
                     charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0),
                     weather = wx, season = if (style == Style.STAGIONE) Seasons.now() else null,
                     trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0),
-                    walk = if (style == Style.ORMA) Steps.today(ctx) else FloatArray(0), walkNow = Steps.nowMinute(), walkDay = LocalDate.now().toEpochDay())
+                    walk = if (style == Style.ORMA) Steps.today(ctx) else FloatArray(0), walkNow = Steps.nowMinute(), walkDay = LocalDate.now().toEpochDay(),
+                    gusts = if (style == Style.ORMA) Gusts.today(ctx) else FloatArray(0))
                 val cols = FloatArray(sc.n * 4)
                 for (i in 0 until sc.n) {
                     val c = Copertina.grain(f, sc.col[i].toInt())
@@ -273,6 +281,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         val sky = Sky.now(Prefs.notturno(ctx))
         // Deserto: relit when the light crosses to the other side at noon, or night falls or lifts
         if (s.style == Style.DESERTO && ((sky.minutes < 720) != s.litMorning || !sky.day != s.atNight)) dirtyBuild = true
+        // Deserto: relit as the light climbs or sinks, so the shade draws in towards noon and lengthens after
+        if (s.style == Style.DESERTO && kotlin.math.abs(sky.alt - s.litAlt) > .05f) dirtyBuild = true
         // Orma: the prints are lit from the other side once the sun passes noon
         if (s.style == Style.ORMA && (sky.minutes < 720) != s.litMorning) dirtyBuild = true
         disc = s.disc(sky)

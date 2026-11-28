@@ -8,23 +8,23 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 In alphabetical order, as Settings shows them.
 
-**Delta.** Each charge of the past week carves a channel out from the hinge, as deep as the charge gave. The oldest silt up; the newest channel's banks wear the finish's accent. The plug is heard for as long as Solco is set, two broadcasts a charge. With no charges yet the sand is flat.
+**Delta.** Each charge carves a channel out from the hinge, as deep as the charge was long. Over a week they braid a delta, the oldest silting up; the newest channel's banks wear the accent. While the phone charges, grain runs down the newest channel from the hinge.
 
-**Deserto.** One great dune across the crease, a true heightfield seen from a low eye and lit from the side the sun or moon is on, its backlit crest catching a rim in the accent; at night the sky above it holds a few stars. (Its own lock-screen clock was removed on 28 Nov 2026.)
+**Deserto.** One great dune across the crease, lit from the side the sun or moon is on and at its real height: a low light throws the shade long, a high one draws it in under the crest. When the real wind outside blows hard enough to move sand, a plume streams off the crest the way it blows. At night the sky holds a few stars.
 
 **Marea.** The grain fills to the battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still.
 
-**Orma.** Today's steps, pressed into the sand as a trail of footprints from the bottom of the glass. Brisk walking lengthens the stride, a run digs in the toes, and where you stood still the feet rest side by side. The morning's prints soften in the wind; the last hour's wear the accent. At midnight the sand is smooth again. Needs the physical activity permission, asked when Orma is chosen.
+**Orbita** (the Solco style until 28 Nov 2026). Bands of grain on rings centred on the hinge: the left edge of the cover screen, the crease of the main screen. Opening the phone stirs the grain one way along its rings, closing it the other, with the outer grain carried first and furthest. Fine grooves fill the quiet middle. Hold a finger on the glass and the nearby rings bow towards it, then flow back when you let go.
 
-**Pioggia.** The weather outside now, as a long exposure: rain in still streaks slanted by the real wind and as long as the rain is hard, snow in soft clumps that drift on the floor, a dry sky a haze as heavy as its cloud, one fork of lightning in a thunderstorm. Read from Open-Meteo (no key; only the place's latitude and longitude, to two places, are sent) every 20 minutes at most, and only while Pioggia is on screen.
+**Orma.** Today's steps, pressed into the sand as a trail of footprints from the bottom of the glass. Brisk walking lengthens the stride, a run digs in the toes, and where you stood still the feet rest side by side. The prints soften as much as today's real wind has blown over them; the last hour's wear the accent. At midnight the sand is smooth again.
+
+**Pioggia.** The weather outside now, as a long exposure: rain in streaks slanted by the real wind, snow in soft clumps, a dry sky a haze as heavy as its cloud. Puddles on the floor hold as much rain as has fallen here today, and stay after it stops. Read from Open-Meteo (no key; only the place's latitude and longitude, to two places, are sent) every 20 minutes at most, and only while Pioggia, Deserto or Orma is on screen.
 
 **Sentiero.** Raked gravel worn by your hand. Each touch on the home screen today presses a hollow with the gravel banked round it, and each swipe drags a path; the last hour's banks wear the accent. At midnight the garden is raked again. Kept on the phone, today only, and only while Sentiero is chosen.
 
-**Solco.** Bands of grain on rings centred on the hinge: the left edge of the cover screen, the crease of the main screen. Opening the phone stirs the grain one way along its rings, closing it the other, with the outer grain carried first and furthest. Fine grooves fill the quiet middle.
+**Stagione.** One ray for each day of the year, fanned from the hinge, as long as that day's daylight here. Days gone are dense, days to come faint; today's ray fills in the accent as the daylight passes, from sunrise to sunset.
 
-**Stagione.** One ray for each day of the year, fanned from the hinge, as long as that day's daylight at your place: the fan swells to midsummer and pinches at the winter solstice. Days gone are dense, days to come faint, today's ray wears the accent; a hair of bare sand marks each month.
-
-**Tronco.** Tree rings. One ring a day from the day Solco is first set, as wide as that day's unfolded use: pale early grain, then a dense line where the day closed. Today's ring is still growing. On the first day there is only a core.
+**Tronco.** One ring a day, as wide as that day’s unfolded use. Across each ring runs its day from midnight to midnight: the grain is dense in the hours the phone was open and pale in the quiet ones, and a fine line closes the ring. The trunk begins as a core on the day you set it.
 
 ## In every style
 

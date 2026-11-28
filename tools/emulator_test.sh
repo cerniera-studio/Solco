@@ -98,7 +98,7 @@ sleep 1.5
 adb exec-out screencap -p > shot-settings-scrolled.png
 
 # The Fold's main screen at its real size: Solco centred on the crease, in Notte
-prefs "<string name=\"style\">SOLCO</string><string name=\"finish\">NOTTE</string>"
+prefs "<string name=\"style\">ORBITA</string><string name=\"finish\">NOTTE</string>"
 adb shell wm size 2256x2504   # the Fold 8 Ultra main screen, as Diagnostics reported it
 sleep 3
 adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
@@ -108,7 +108,7 @@ adb shell wm size reset
 
 # 11 Nov 2026: the new styles in every finish on the cover's shape, Marea at 35% and charging (Duna retired 28 Nov)
 adb shell wm size 1080x2520; sleep 2
-for st in SOLCO MAREA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
+for st in ORBITA MAREA; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string>"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 8
@@ -135,7 +135,8 @@ for d in 6.6:0.62 5.7:0.55 4.4:0.18 3.6:0.70 2.7:0.48 1.6:0.66 0.5:0.58; do
   age=${d%%:*}; gain=${d##*:}
   WEEK="$WEEK$(python3 -c "print(int($NOW - $age * 86400000))"):$gain;"
 done
-WX="2.2:0:63:95:7:250:$(date +%s)"
+# 28 Nov 2026: a strong south-westerly (a plume on Deserto, softened prints on Orma) and 14 mm fallen today (puddles)
+WX="2.2:0:63:95:13:250:$(date +%s):14"
 TRAIL=$(python3 - "$NOW" <<'PY'
 import sys, random
 now = int(sys.argv[1]); random.seed(7); out = []
@@ -181,7 +182,7 @@ adb shell wm size reset
 
 # Every style and finish at the main screen's size, so no combination fails only on the phone
 adb shell wm size 2256x2504
-for st in DELTA DESERTO MAREA ORMA PIOGGIA SENTIERO SOLCO STAGIONE TRONCO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
+for st in DELTA DESERTO MAREA ORBITA ORMA PIOGGIA SENTIERO STAGIONE TRONCO; do for fi in VISCONTI CARBONIO NOTTE TABACCO GRAFITE BRONZO VERDERAME; do
   prefs "<string name=\"style\">$st</string><string name=\"finish\">$fi</string><string name=\"growth_start\">$(date -d '-12 days' +%F)</string>$EXTRA"
   adb shell am start -a android.service.wallpaper.CHANGE_LIVE_WALLPAPER --ecn android.service.wallpaper.extra.LIVE_WALLPAPER_COMPONENT $WP
   sleep 9
