@@ -7,16 +7,14 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Deserto (25 Nov 2026): one great dune, its summit on the crease in the lock-screen clock's place,
- * and the time standing in the sky behind its crest, as a depth effect does. A live wallpaper is
- * drawn beneath the lock screen, so One UI's own clock can never go behind the dune: Solco draws its
- * own clock, in Italiana, and shows it only while the phone is locked. Hide One UI's clock to see it
- * alone. From claude/deserto-design.md, where the seven HD images were drawn the same way.
+ * Deserto (25 Nov 2026): one great dune, its summit on the crease. From claude/deserto-design.md,
+ * where the seven HD images were drawn the same way. Its own lock-screen clock, standing in the sky
+ * behind the crest, was removed on 28 Nov 2026; the summit keeps the place the clock's band gave it.
  */
 
-/** Where the clock stands and the dune rises, in view pixels. */
+/** Where the dune rises, in view pixels: the summit sits where the old clock band ended. */
 class DesertoLayout(w: Int, h: Int, cover: Boolean) {
-    /** A digit's height, the clock's top, its lines (hours over minutes on the cover) and their height. */
+    /** The old clock band's digit height, top, lines and height, kept only to place the summit as before. */
     val digit: Float
     val top: Float
     val lines: Int
@@ -34,15 +32,6 @@ class DesertoLayout(w: Int, h: Int, cover: Boolean) {
             digit = .19f * w; top = .13f * h; lines = 1; height = digit * 1.02f
             sy = top + height - digit * .42f
         }
-    }
-}
-
-/** The clock's shape: an alpha mask [w] by [h] laid at [top] in view pixels (see ClockPaint). */
-class ClockMask(val w: Int, val h: Int, val top: Float, val a: ByteArray) {
-    fun at(x: Float, y: Float): Boolean {
-        val i = x.toInt(); val j = (y - top).toInt()
-        if (i < 0 || j < 0 || i >= w || j >= h) return false
-        return (a[j * w + i].toInt() and 0xFF) >= 128
     }
 }
 

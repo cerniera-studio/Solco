@@ -86,8 +86,8 @@ for s in "cover-portrait 823x1920 320 0" "cover-landscape 823x1920 320 1" "main-
   # the landscape shapes. The turned wallpaper is seen in the Settings previews above, which draw the
   # same scenes on the turned screen's own shape.
   wallpaper $WP "shot-shape-$name-wp-solco"
-  prefs "<string name=\"style\">DUNA</string><string name=\"finish\">TABACCO</string>"
-  wallpaper $WP "shot-shape-$name-wp-duna"
+  prefs "<string name=\"style\">DESERTO</string><string name=\"finish\">TABACCO</string>"
+  wallpaper $WP "shot-shape-$name-wp-deserto"
   prefs "<string name=\"sipario\">GOCCIA</string>"
   wallpaper $SIP "shot-shape-$name-wp-goccia"
   prefs "<string name=\"sipario\">CATENARIA</string>"

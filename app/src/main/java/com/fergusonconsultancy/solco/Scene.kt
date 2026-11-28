@@ -17,7 +17,7 @@ import kotlin.math.sqrt
  *
  * Rings centre on the hinge: the left edge of the tall cover screen, the crease of the main one.
  *
- * Both screens, both ways round (12 Nov 2026). Solco, Tronco and Duna answer to the hinge, which
+ * Both screens, both ways round (12 Nov 2026). Solco and Tronco answer to the hinge, which
  * stays where it is on the glass when the phone turns, so they are laid out the right way up for
  * the glass and then turned with it: on the cover held sideways, the hinge runs along the bottom
  * (or the top). Marea answers to gravity, so its water always fills from the bottom of the view.
@@ -34,7 +34,7 @@ class Scene(
     charging: Boolean = false,
     /** The display's rotation (Surface.ROTATION_*), to tell which way a sideways surface was turned. */
     rotation: Int = 0,
-    /** Polvere: the sky the shaft of light falls from. Without one, or with the moon set, there is no shaft. */
+    /** The sky: the sun or moon that lights Deserto and Orma, and Notturno's night. */
     sky: SkyState? = null,
     /** Pioggia: the weather outside now; without it, an overcast haze. */
     private val weather: Wx? = null,
@@ -44,8 +44,6 @@ class Scene(
     private val trail: FloatArray = FloatArray(0),
     /** Delta: each charge of the week as age in days, gain and seed (see [Charges]). */
     private val charges: FloatArray = FloatArray(0),
-    /** Deserto: the time's shape, to stand behind the crest (see [ClockPaint]); without it, no clock. */
-    private val clock: ClockMask? = null,
     /** Orma: today's steps, one value a minute from midnight (see [Steps]), and the minute it is now. */
     private val walk: FloatArray = FloatArray(0),
     private val walkNow: Int = 0,
@@ -59,7 +57,7 @@ class Scene(
      * surface is a turned one; the display's rotation says which way. Tiles are never turned.
      */
     val quarter: Int = if (coverOverride != null || w <= h) 0 else if (rotation == 3) 3 else 1
-    private val turned = quarter != 0 && style != Style.MAREA && style != Style.POLVERE && style != Style.PIOGGIA && style != Style.DESERTO
+    private val turned = quarter != 0 && style != Style.MAREA && style != Style.PIOGGIA && style != Style.DESERTO
     /** The glass's own upright size, in which the hinge styles are laid out before turning. */
     private val gw: Int = if (turned) h else w
     private val gh: Int = if (turned) w else h
@@ -91,22 +89,11 @@ class Scene(
     private var lastX = 0f
     private var lastY = 0f
 
-    /** Polvere: the sky the shaft was built for, so the renderer knows when the sun has moved on. */
-    val skyAlt: Float = sky?.alt ?: -1f
-    val skyShown: Boolean = sky?.shown ?: false
     /** Deserto: whether the dune was lit from the left (the morning) and by night, so the renderer knows when to relight it. */
     val litMorning: Boolean = (sky?.minutes ?: 600) < 720
     val atNight: Boolean = sky?.day == false
     private val skyAt: SkyState? = sky
-    /** Polvere: which grains hang in the light (and so can settle), and the floor they settle to. */
-    private val airborne = BooleanArray(if (style == Style.POLVERE) cap else 0)
-    private val floorY = h * .955f
-    /**
-     * Deserto: the first of the clock's grains (all after it are the clock, drawn only while locked),
-     * and the skyline it was cut against. Declared before [n], because laying the grain sets them.
-     */
-    var clockFrom: Int = Int.MAX_VALUE
-        private set
+    /** Deserto: the skyline, to set the sun or moon above it. Declared before [n], because laying the grain sets it. */
     private var deserSky = FloatArray(0)
     private var deserCell = 1f
 
@@ -123,8 +110,6 @@ class Scene(
         Style.SOLCO -> genSolco()
         Style.TRONCO -> genTronco()
         Style.MAREA -> genMarea()
-        Style.DUNA -> genDuna()
-        Style.POLVERE -> genPolvere()
         Style.DELTA -> genDelta()
         Style.PIOGGIA -> genPioggia()
         Style.STAGIONE -> genStagione()
@@ -167,263 +152,6 @@ class Scene(
     /** Marea while charging: the surface breathes. Nothing else ever moves on its own. */
     var breathing = charging && style == Style.MAREA
     private var breathT0 = 0L
-
-    // ---- Duna: wind ripples blowing out from the hinge, gentle windward, steep on the lee ----
-    private fun genDuna(): Int {
-        val rng = Rng(53)
-        val lambda = 26f * dp
-        var k = 0; var guard = 0
-        while (k < cap && guard < cap * 40) {
-            guard++
-            val x = rng.next() * gw; val y = rng.next() * gh
-            // Distance downwind from the hinge, the ripples curving a little as wind does
-            val u = abs(x - gcx) + .035f * gh * sin(y / gh * 6.2832f * 1.3f + abs(x - gcx) / (gw * .4f))
-            val ph = (u / lambda) % 1f
-            val ripple = if (ph < .75f) (ph / .75f).pow(1.5f) else (1f - (ph - .75f) / .25f).pow(3f)
-            val dune = .55f + .45f * sin(u / (lambda * 9f) + y / (gh * .9f))
-            val dens = .06f + .80f * ripple * dune
-            if (rng.next() > dens) continue
-            hx[k] = x; hy[k] = y
-            col[k] = (if (ripple > .82f) 1 else if (ripple < .25f && rng.next() < .6f) 2 else 0).toByte()
-            hash[k] = rng.next()
-            k++
-        }
-        return k
-    }
-
-    /**
-     * Gravity across the screen (m/s² in screen axes), from the tilt sensor; Duna only. The sensor's
-     * reading is the target; the grain feels it eased over about a tenth of a second, so a new
-     * reading never turns the whole sheet at once.
-     */
-    private var tgx = 0f
-    private var tgy = 0f
-    private var gx = 0f
-    private var gy = 0f
-    /** Below this share of g a slope holds: the angle of repose, about 17°. */
-    private val repose = .30f * 9.81f
-
-    fun tilt(x: Float, y: Float) { tgx = x; tgy = y }
-
-    /** Only the loosest fifth of the grain slides, each at its own speed, so no seam forms. */
-    private fun loose(i: Int) = if (style == Style.DUNA && hash[i] > .80f) (hash[i] - .80f) / .20f else 0f
-
-    /** True if the slope is past the angle of repose, so the loose grain will move. */
-    fun sliding() = style == Style.DUNA && hypot(tgx, tgy) > repose
-
-    /**
-     * The heap (24 Nov 2026). On the phone the slid grain ran to the edge and was squeezed onto a
-     * single line of pixels, so a corner never showed how much had gathered there. Now grain that runs
-     * downhill takes up room: it piles against the edge and into the corner as a heap whose size is the
-     * grain that came, its surface lying across the slope, and the heap pours round as the phone turns.
-     *
-     * Kept as a field of how full the glass is, splatted smoothly so no cell edge ever shows. Where it is
-     * fuller than packed sand, grain is pushed towards the emptier side; each grain samples the field a
-     * little off its own place so the heap never sets into rows. Sand under the heap's load has more
-     * friction than running sand, and grain that has stayed put on a held place rests, so a heap that
-     * has come to rest costs no frames. Tuned in a Python port of this code (tools/duna_heap.py).
-     */
-    private val duna = style == Style.DUNA
-    private val cell = 3f * dp
-    private val cw = if (duna) (w / cell).toInt() + 2 else 0
-    private val ch = if (duna) (h / cell).toInt() + 2 else 0
-    private val crowd = FloatArray(cw * ch)
-    /** Grains per node that packed sand holds: one per 2.2 dp², denser than the dune it came from. */
-    private val packed = cell * cell / (2.2f * dp * dp)
-    private val looseIdx: IntArray = if (duna) IntArray(cap) else IntArray(0)
-    private var looseN = 0
-    private val dn = if (duna) cap else 0
-    private val px0 = FloatArray(dn); private val py0 = FloatArray(dn)
-    /** Loose grain that has let go and is in the slide's care until the wind has it home again. */
-    private val gone = BooleanArray(dn)
-    /** Grain at rest in the heap, and how long it has stayed within reach of [anX], [anY]. */
-    private val asleep = BooleanArray(dn)
-    private val calm = ByteArray(dn)
-    private val anX = FloatArray(dn); private val anY = FloatArray(dn)
-    /** Where each grain samples the crowd from, a fixed step off its own place. */
-    private val jx = FloatArray(dn); private val jy = FloatArray(dn)
-    /** The slope the heap last came to rest under; a swing of more than 4° from it wakes the heap. */
-    private var restX = 0f
-    private var restY = 0f
-    private val wakeCos = cos(Math.toRadians(4.0)).toFloat()
-
-    init {
-        if (duna) for (i in 0 until n) if (loose(i) > 0f) {
-            looseIdx[looseN++] = i
-            jx[i] = (((hash[i] * 104729.7f) % 1f) - .5f) * cell
-            jy[i] = (((hash[i] * 15485.863f) % 1f) - .5f) * cell
-        }
-    }
-
-    /** Each loose grain's second, independent draw: how readily the wind lifts it home. */
-    private fun lift(i: Int) = ((hash[i] * 7919.13f) % 1f)
-
-    /** A broad, fixed field that bends running grain into rivulets rather than one moving sheet. */
-    private fun rivulet(x: Float, y: Float) =
-        .55f * sin(x / (41f * dp) + 1.6f * sin(y / (67f * dp))) + .45f * sin(y / (29f * dp) - 1.3f * sin(x / (53f * dp)))
-
-    /** Splat every loose grain into the field as a share of packed, bilinearly. */
-    private fun count() {
-        java.util.Arrays.fill(crowd, 0f)
-        for (j in 0 until looseN) {
-            val i = looseIdx[j]
-            val fx = ((hx[i] + ox[i]) / cell).coerceIn(0f, cw - 1.001f)
-            val fy = ((hy[i] + oy[i]) / cell).coerceIn(0f, ch - 1.001f)
-            val ix = fx.toInt(); val iy = fy.toInt()
-            val ax = fx - ix; val ay = fy - iy
-            val q = iy * cw + ix
-            crowd[q] += (1 - ax) * (1 - ay); crowd[q + 1] += ax * (1 - ay)
-            crowd[q + cw] += (1 - ax) * ay; crowd[q + cw + 1] += ax * ay
-        }
-        val inv = 1f / packed
-        for (q in crowd.indices) crowd[q] *= inv
-    }
-
-    /** How full the glass is at x, y: 1 is packed sand. */
-    private fun fill(x: Float, y: Float): Float {
-        val fx = (x / cell).coerceIn(0f, cw - 1.001f); val fy = (y / cell).coerceIn(0f, ch - 1.001f)
-        val ix = fx.toInt(); val iy = fy.toInt(); val ax = fx - ix; val ay = fy - iy
-        val q = iy * cw + ix
-        return (crowd[q] * (1 - ax) + crowd[q + 1] * ax) * (1 - ay) + (crowd[q + cw] * (1 - ax) + crowd[q + cw + 1] * ax) * ay
-    }
-
-    /** How far past packed the sand is at x, y (0 when there is room). */
-    private fun over(x: Float, y: Float) = (fill(x, y) - 1f).coerceAtLeast(0f)
-
-    /** Held: in the heap, with sand (or the glass's edge) just downhill. */
-    private fun held(x: Float, y: Float, ux: Float, uy: Float): Boolean {
-        if (fill(x, y) <= .6f) return false
-        val bx = x + ux * cell * 1.2f; val by = y + uy * cell * 1.2f
-        return bx < 0f || by < 0f || bx > w || by > h || fill(bx, by) > .6f
-    }
-
-    /** A finger in the heap wakes the grain it touches. */
-    private fun rouse(i: Int) { if (duna && i < dn && asleep[i]) { asleep[i] = false; calm[i] = 0 } }
-
-    /**
-     * Duna, one frame. Past the angle of repose the loose grain runs downhill, the loosest first and
-     * at the lowest slope, bent into rivulets; where it arrives it heaps, the crowd pushing it back up
-     * the slope until the heap holds. Level again, the wind lifts the heap home from its surface down.
-     */
-    private fun dunaStep(dt: Float): Float {
-        if (looseN == 0) return 0f
-        // Ease towards the sensor's reading
-        val ease = 1f - kotlin.math.exp(-dt * 16.67f / 110f)
-        gx += (tgx - gx) * ease; gy += (tgy - gy) * ease
-        val gm = hypot(gx, gy).coerceAtLeast(1e-3f)
-        val slide = gm > repose
-        val ux = gx / gm; val uy = gy / gm
-        val easing = abs(tgx - gx) + abs(tgy - gy) > .05f
-        // Levelled, or swung more than 4° from where the heap came to rest: the heap wakes
-        if (!slide || ux * restX + uy * restY < wakeCos) {
-            for (j in 0 until looseN) { val i = looseIdx[j]; if (asleep[i]) { asleep[i] = false; calm[i] = 0 } }
-            restX = ux; restY = uy
-        }
-        // Anything to do?
-        var any = easing
-        if (!any) for (j in 0 until looseN) {
-            val i = looseIdx[j]
-            if ((gone[i] && !asleep[i]) || (slide && !gone[i] && gm > repose * (1f + .4f * (1f - loose(i))))) { any = true; break }
-        }
-        if (!any) return 0f
-
-        if (slide) for (j in 0 until looseN) {
-            // The loosest grain lets go at 17°, the stickiest of the loose at about 24°
-            val i = looseIdx[j]
-            if (!gone[i] && gm > repose * (1f + .4f * (1f - loose(i)))) gone[i] = true
-        }
-        count()
-        val vmax = 4.5f * dp
-        for (j in 0 until looseN) {
-            val i = looseIdx[j]
-            px0[i] = ox[i]; py0[i] = oy[i]
-            if (!gone[i]) continue
-            val x = hx[i] + ox[i]; val y = hy[i] + oy[i]
-            val fl = fill(x, y)
-            // Its heap has gone from under it: a resting grain wakes
-            if (asleep[i]) { if (fl < .45f) { asleep[i] = false; calm[i] = 0 } else continue }
-            if (slide) {
-                val pull = (gm - repose) / 9.81f * .9f * dp * dt * (.6f + .4f * loose(i))
-                val bend = rivulet(x, y) * .55f
-                val damp = .94f.pow(dt) * (if (fl > 1.15f) .8f.pow(dt) else 1f)
-                vx[i] = (vx[i] + (ux - uy * bend) * pull) * damp
-                vy[i] = (vy[i] + (uy + ux * bend) * pull) * damp
-            } else {
-                // The wind: soft, each grain its own, and buried grain waits for the grain above it
-                val ov = (fl - 1f).coerceAtLeast(0f)
-                val k = .0016f * dt * (.55f + .9f * lift(i)) / (1f + 5f * ov)
-                vx[i] = (vx[i] - ox[i] * k) * .9f.pow(dt)
-                vy[i] = (vy[i] - oy[i] * k) * .9f.pow(dt)
-                // The last stretch home at a walking pace, never a crawl
-                val d = hypot(ox[i], oy[i]); val floor = min(d, .08f * dp)
-                if (d > 0f && ov < .3f && hypot(vx[i], vy[i]) < floor) { vx[i] = -ox[i] / d * floor; vy[i] = -oy[i] / d * floor }
-            }
-            val v = hypot(vx[i], vy[i])
-            if (v > vmax) { vx[i] *= vmax / v; vy[i] *= vmax / v }
-            ox[i] += vx[i] * dt; oy[i] += vy[i] * dt
-        }
-        // The crowd pushes back, three times a frame, from the fuller side towards the emptier
-        val half = cell * .5f
-        repeat(3) {
-            count()
-            for (j in 0 until looseN) {
-                val i = looseIdx[j]
-                if (!gone[i] || asleep[i]) continue
-                val x = hx[i] + ox[i] + jx[i]; val y = hy[i] + oy[i] + jy[i]
-                if (over(x, y) <= 0f) continue
-                val gxE = over(x + half, y) - over(x - half, y)
-                val gyE = over(x, y + half) - over(x, y - half)
-                val gl = hypot(gxE, gyE)
-                if (gl < 1e-4f) continue
-                val push = min(.5f * cell, .45f * cell * gl)
-                ox[i] -= gxE / gl * push; oy[i] -= gyE / gl * push
-            }
-        }
-        // The glass's edge holds the heap
-        val lo = .6f * dp; val hiX = w - .6f * dp; val hiY = h - .6f * dp
-        for (j in 0 until looseN) {
-            val i = looseIdx[j]
-            if (!gone[i] || asleep[i]) continue
-            ox[i] = (hx[i] + ox[i]).coerceIn(lo, hiX) - hx[i]; oy[i] = (hy[i] + oy[i]).coerceIn(lo, hiY) - hy[i]
-        }
-        count()
-        var energy = 0f
-        for (j in 0 until looseN) {
-            val i = looseIdx[j]
-            if (!gone[i] || asleep[i]) continue
-            val mx = ox[i] - px0[i]; val my = oy[i] - py0[i]
-            val moved = abs(mx) + abs(my)
-            // Sand sticks: a little for running grain, much more for grain under the heap's load
-            if (slide && moved < (if (fill(hx[i] + ox[i], hy[i] + oy[i]) > 1f) .15f else .045f) * dp * dt) {
-                ox[i] = px0[i]; oy[i] = py0[i]; vx[i] = 0f; vy[i] = 0f
-                continue
-            }
-            // What the heap took away from a grain's run, it keeps
-            vx[i] = mx / dt; vy[i] = my / dt
-            if (moved > energy) energy = moved
-            // Home again: back in the touch's and the fold's care
-            if (!slide && abs(ox[i]) + abs(oy[i]) <= .5f * dp) { gone[i] = false; vx[i] = 0f; vy[i] = 0f }
-        }
-        if (slide) {
-            count()
-            val reach = 2.5f * dp
-            for (j in 0 until looseN) {
-                val i = looseIdx[j]
-                if (!gone[i] || asleep[i]) continue
-                val x = hx[i] + ox[i]; val y = hy[i] + oy[i]
-                // Calm: still within reach of where it last stopped going anywhere, and held there
-                val near = abs(x - anX[i]) + abs(y - anY[i]) < reach
-                if (!near) { anX[i] = x; anY[i] = y }
-                if (near && held(x, y, ux, uy)) {
-                    if (calm[i] < 20) calm[i]++
-                    if (calm[i] >= 20) { asleep[i] = true; vx[i] = 0f; vy[i] = 0f }
-                } else calm[i] = 0
-            }
-        }
-        // While the felt slope still catches up with the sensor, keep drawing
-        if (easing) energy = max(energy, 1f)
-        return energy
-    }
 
     // ---- Solco: bands of grain round the hinge, densest towards each band's outer edge ----
     private fun genSolco(): Int {
@@ -504,69 +232,13 @@ class Scene(
         return k
     }
 
-    // ---- Polvere: dust in a shaft of light from the disc; what has settled lies on the floor ----
-    private fun genPolvere(): Int {
-        val sk = skyAt
-        val d = if (sk != null && sk.shown) disc(sk) else null
-        // The shaft falls from the disc towards the floor, leaning away from the hinge
-        val side = if (d == null || d[0] >= cx) 1f else -1f
-        val lean = .42f * side
-        val ul = sqrt(lean * lean + 1f)
-        val ux = lean / ul; val uy = 1f / ul
-        val rng = Rng(71)
-        var k = 0; var guard = 0
-        while (k < cap && guard < cap * 40) {
-            guard++
-            val x = rng.next() * w; val y = rng.next() * h
-            var dens: Float; var c: Int; var air = false
-            if (y > floorY + 1.5f * dp * sin(x / (w * .09f))) {
-                // The floor: everything that ever settled, densest at the bottom
-                dens = .55f + .35f * ((y - floorY) / (h - floorY)).coerceIn(0f, 1f); c = if (rng.next() < .3f) 0 else 2
-            } else if (d != null) {
-                val dx = x - d[0]; val dy = y - d[1]
-                val t = dx * ux + dy * uy
-                val perp = abs(-dx * uy + dy * ux)
-                val half = d[2] * .85f + t * .30f
-                if (t > 0f && perp < half) {
-                    // In the light: a fine haze, brighter motes, both fading as the shaft spreads and towards its edges
-                    val edge = 1f - (perp / half).pow(3f)
-                    val fade = (1f - t / (h * 1.1f)).coerceIn(.25f, 1f)
-                    val mote = rng.next() < .045f
-                    dens = (if (mote) 1f else .26f) * edge * fade; c = if (mote) 0 else 2; air = true
-                } else { dens = .010f; c = 2 }
-            } else { dens = .006f; c = 2 }
-            if (rng.next() > dens) continue
-            hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next(); airborne[k] = air
-            k++
-        }
-        return k
-    }
-
-    /**
-     * Polvere: [share] of the dust in the light has settled while the phone lay still. It is put on the
-     * floor beneath where it hung, and the spring lifts it home, which is the picking up.
-     */
-    fun settle(share: Float) {
-        if (style != Style.POLVERE) return
-        val f = share.coerceIn(0f, 1f)
-        if (f <= 0f) return
-        for (i in 0 until n) {
-            if (!airborne[i] || hash[i] >= f) continue
-            val rest = floorY - (hash[i] / f) * 7f * dp - 1f * dp
-            ox[i] = (hash[i] - .5f) * 6f * dp
-            oy[i] = rest - hy[i]
-            vx[i] = 0f; vy[i] = 0f
-        }
-    }
-
-    // ---- Deserto: one great dune, the clock behind its crest ----
+    // ---- Deserto: one great dune ----
     /**
      * Deserto (25 Nov 2026). The dune is a true heightfield seen from a low eye (see [Dune]), cast
      * column by column from near to far, each cell lit by the low sun or moon and exposed for the
      * brightest sand, as a camera would be. Grain then falls by the light, from a fixed number of
      * tries, so the shade stays dark. The backlit crest catches a rim in the accent; at night the sky
-     * holds a few stars. Last of all, and only where the sky shows, the clock: its grain sits from
-     * [clockFrom] to the end, so the renderer draws it only while the phone is locked.
+     * holds a few stars. Its clock was removed on 28 Nov 2026: the sky above the crest is left empty.
      */
     private fun genDeserto(): Int {
         val lay = DesertoLayout(w, h, cover)
@@ -625,21 +297,6 @@ class Scene(
             }
             if (rng.next() >= dens) continue
             hx[k] = x; hy[k] = y; col[k] = c.toByte(); hash[k] = rng.next()
-            k++
-        }
-        clockFrom = k
-        val m = clock ?: return k
-        val reach = lay.height * 1.25f
-        // Three times as dense as the brightest sand: the time is read at a glance
-        val clockTries = (w * reach / (4.2f * dp * dp) * 5f).toInt()
-        for (g in 0 until clockTries) {
-            if (k >= cap) break
-            val x = rng.next() * w; val y = lay.top + rng.next() * reach
-            if (!m.at(x, y)) continue
-            // Behind the crest: only where the sky shows
-            if (y > skyline[(x / cell).toInt().coerceAtMost(cw - 1)] - 1.5f * dp) continue
-            if (rng.next() >= .9f) continue
-            hx[k] = x; hy[k] = y; col[k] = 0; hash[k] = rng.next()
             k++
         }
         return k
@@ -1169,7 +826,7 @@ class Scene(
     /** x, y and radius of the disc for [sky]. */
     fun disc(sky: SkyState): FloatArray {
         if (style == Style.DESERTO) {
-            // Low in the sky on the side the light comes from, always clear of the clock and above the sand
+            // Low in the sky on the side the light comes from, always above the sand
             val rad = (if (cover) .07f else .055f) * min(w, h)
             val x = if (sky.minutes < 720) w * (if (cover) .13f else .17f) else w * (if (cover) .87f else .83f)
             val ground = skyAtX(x) - rad - 10f * dp
@@ -1237,7 +894,6 @@ class Scene(
             if (d2 > rho2) continue
             val d = sqrt(d2).coerceAtLeast(1f)
             val f = (1f - d / rho).let { it * it }
-            rouse(i)
             vx[i] += dx / d * f * 2.2f * dp + mvx * f * .18f
             vy[i] += dy / d * f * 2.2f * dp + mvy * f * .18f
         }
@@ -1254,10 +910,7 @@ class Scene(
         val k = .010f * dt
         val damp = .915f.pow(dt)
         var energy = 0f
-        // Duna: the loose grain runs, heaps and is blown home in its own pass (see dunaStep)
-        if (duna) energy = dunaStep(dt)
         for (i in 0 until n) {
-            if (duna && gone[i]) { kick[i] = 0f; continue }
             if (kick[i] != 0f) {
                 if (now >= kickAt[i]) {
                     val dx = hx[i] - cx; val dy = hy[i] - cy

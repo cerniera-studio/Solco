@@ -24,33 +24,31 @@ enum class Finish(
     val speck: Int,
     val light: Boolean,
 ) {
-    // 11 Nov 2026: Avorio (too light) became Tabacco and Rosso (its tone) became Notte; Grafite and Bronzo added
-    VISCONTI("Visconti", 0x0E1311, 0xD9BB86, 0.10f, intArrayOf(0xD9BB86, 0xF6F1E6, 0x96805C), 0.72f, 0xECE0C8, 0xC9A064, 0x0E1311, false),
+    // In alphabetical order (28 Nov 2026), as Settings shows them. Avorio (too light) became Tabacco and
+    // Rosso (its tone) became Notte on 11 Nov; Verderame made seven on 21 Nov, one for each day of the week
+    BRONZO("Bronzo", 0x0D0B09, 0xC8894A, 0.09f, intArrayOf(0xD69C5E, 0xB4683A, 0xEAD4A8), 0.78f, 0xF2CC96, 0xB97C46, 0x0D0B09, false),
     CARBONIO("Carbonio", 0x0B0B0C, 0xF6F1E6, 0.08f, intArrayOf(0xE2DED6, 0xB2382A, 0x76767A), 0.78f, 0xF0ECE4, 0xCEB28A, 0x0B0B0C, false),
+    GRAFITE("Grafite", 0x18191B, 0xC8CCD2, 0.08f, intArrayOf(0xD4D7DC, 0x8C9096, 0x55595F), 0.74f, 0xE8EAEC, 0xB4B8BE, 0x18191B, false),
     NOTTE("Notte", 0x0A0F1E, 0xD9BB86, 0.09f, intArrayOf(0xEEEBE4, 0xD9BB86, 0x5C6C8E), 0.74f, 0xEEF0F5, 0xD4D8E2, 0x0A0F1E, false),
     TABACCO("Tabacco", 0x1C140E, 0xE6D4B0, 0.09f, intArrayOf(0xE6D6B4, 0xC28C44, 0x7E5C3C), 0.76f, 0xF2E2C2, 0xCC9A58, 0x1C140E, false),
-    GRAFITE("Grafite", 0x18191B, 0xC8CCD2, 0.08f, intArrayOf(0xD4D7DC, 0x8C9096, 0x55595F), 0.74f, 0xE8EAEC, 0xB4B8BE, 0x18191B, false),
-    BRONZO("Bronzo", 0x0D0B09, 0xC8894A, 0.09f, intArrayOf(0xD69C5E, 0xB4683A, 0xEAD4A8), 0.78f, 0xF2CC96, 0xB97C46, 0x0D0B09, false),
-    // 21 Nov 2026: a seventh, so a style and a finish can be chosen for each day of the week
     VERDERAME("Verderame", 0x0A1F20, 0x9CC9B8, 0.09f, intArrayOf(0xA9CFC0, 0xC98A5A, 0x4F8676), 0.76f, 0xE4EFE9, 0xC99A6A, 0x0A1F20, false),
+    VISCONTI("Visconti", 0x0E1311, 0xD9BB86, 0.10f, intArrayOf(0xD9BB86, 0xF6F1E6, 0x96805C), 0.72f, 0xECE0C8, 0xC9A064, 0x0E1311, false),
 }
 
 /** A style is a different force acting on the grain. Each says what puts it where it is. */
 enum class Style(val title: String, val note: String) {
-    SOLCO("Solco", "Rings centred on the hinge. Folding stirs the grain along the swing; a fast fold leaves the bands emptier."),
-    TRONCO("Tronco", "One ring a day, as wide as that day’s unfolded use: pale early grain, then a dense line where the day closed. The trunk begins as a core on the day you set it."),
-    MAREA("Marea", "The grain fills to your battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still."),
-    DUNA("Duna", "Wind ripples blowing out from the hinge, gentle windward and steep on the lee. Tilt past the angle of repose and the loosest grain runs downhill and heaps in the corner, as much as came; turn the phone and the heap pours round; level it and the wind blows it home."),
-    POLVERE("Polvere", "Dust hangs in a shaft of light from the sun or moon. The longer the phone lies untouched, the more of it has settled to the floor; picking it up lifts it back into the light."),
+    // In alphabetical order (28 Nov 2026), as Settings shows them. Nebulosa gave way to Pioggia, Stagione and
+    // Sentiero on 24 Nov; Deserto came on 25 Nov and Orma on 27 Nov; Duna and Polvere were retired on 28 Nov,
+    // and Deserto's lock-screen clock with them.
     DELTA("Delta", "Each charge carves a channel out from the hinge, as deep as the charge was long. Over a week they braid a delta, the oldest silting up; the newest channel's banks wear the accent."),
-    // 24 Nov 2026: Nebulosa (the room's light) gave way to these three
-    PIOGGIA("Pioggia", "The weather outside now, as a long exposure: rain in streaks slanted by the real wind, snow in soft clumps, a dry sky a haze as heavy as its cloud. Read from Open-Meteo for your place, every 20 minutes while it is on screen."),
-    STAGIONE("Stagione", "One ray for each day of the year, fanned from the hinge, as long as that day's daylight here. Days gone are dense, days to come faint; today's ray wears the accent."),
-    SENTIERO("Sentiero", "Raked gravel worn by your hand: each touch on the home screen today presses a hollow, each swipe drags a path, and the last hour's banks wear the accent. At midnight it is raked again. Kept on the phone."),
-    // 25 Nov 2026: from claude/deserto-design.md
-    DESERTO("Deserto", "One great dune across the crease, lit from the side the sun or moon is on. While the phone is locked the time stands in the sky behind its crest, as a depth effect does; hide One UI's own clock to see it alone."),
-    // 27 Nov 2026: from the holding basket (App Ideas 25 Nov)
+    DESERTO("Deserto", "One great dune across the crease, lit from the side the sun or moon is on: the morning light from the left, the afternoon from the right, the shade side dark and the backlit crest edged in the accent. At night the sky above it holds a few stars."),
+    MAREA("Marea", "The grain fills to your battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still."),
     ORMA("Orma", "Today's steps, pressed into the sand as a trail of footprints from the bottom of the glass. Brisk walking lengthens the stride, a run digs in the toes, and where you stood still the feet rest side by side. The morning's prints soften in the wind; the last hour's wear the accent. At midnight the sand is smooth again."),
+    PIOGGIA("Pioggia", "The weather outside now, as a long exposure: rain in streaks slanted by the real wind, snow in soft clumps, a dry sky a haze as heavy as its cloud. Read from Open-Meteo for your place, every 20 minutes while it is on screen."),
+    SENTIERO("Sentiero", "Raked gravel worn by your hand: each touch on the home screen today presses a hollow, each swipe drags a path, and the last hour's banks wear the accent. At midnight it is raked again. Kept on the phone."),
+    SOLCO("Solco", "Rings centred on the hinge. Folding stirs the grain along the swing; a fast fold leaves the bands emptier."),
+    STAGIONE("Stagione", "One ray for each day of the year, fanned from the hinge, as long as that day's daylight here. Days gone are dense, days to come faint; today's ray wears the accent."),
+    TRONCO("Tronco", "One ring a day, as wide as that day’s unfolded use: pale early grain, then a dense line where the day closed. The trunk begins as a core on the day you set it."),
 }
 
 /**
@@ -85,8 +83,11 @@ object Prefs {
     @JvmStatic fun isLook(key: String?) = key != null && key in LOOK
 
     fun style(c: Context): Style {
-        // Nebulosa was retired on 24 Nov 2026: a saved choice of it carries over to Stagione
-        val name = when (val n = of(c).getString("style", null)) { "NEBULOSA" -> "STAGIONE"; null -> "SOLCO"; else -> n }
+        // Retired styles carry over: Nebulosa (24 Nov 2026) to Stagione; Duna to Deserto, the other sand,
+        // and Polvere to Solco (28 Nov 2026)
+        val name = when (val n = of(c).getString("style", null)) {
+            "NEBULOSA" -> "STAGIONE"; "DUNA" -> "DESERTO"; "POLVERE" -> "SOLCO"; null -> "SOLCO"; else -> n
+        }
         return runCatching { Style.valueOf(name) }.getOrDefault(Style.SOLCO)
     }
     fun finish(c: Context): Finish {

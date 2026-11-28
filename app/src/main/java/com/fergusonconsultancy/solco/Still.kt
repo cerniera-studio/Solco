@@ -27,7 +27,7 @@ import java.util.concurrent.Executors
  * screen), keeps it at 1080 px on its longest side, and shares it with Cerniera's apps through
  * [StillProvider]. Fold Widgets is told, so it and its followers redraw over the new still.
  *
- * Never while locked (Deserto's clock is drawn then) or in the preview.
+ * Never while locked or in the preview.
  */
 object Still {
     private const val EVERY_MS = 10 * 60_000L

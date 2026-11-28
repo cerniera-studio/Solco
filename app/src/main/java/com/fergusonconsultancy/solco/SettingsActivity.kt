@@ -91,7 +91,7 @@ class SettingsActivity : Activity() {
 
         // Style: each one a different force. Rows of two, each large enough to read its grain
         screen.section("Style")
-        Style.values().toList().chunked(2).forEachIndexed { r, pair ->
+        Style.values().sortedBy { it.title }.chunked(2).forEachIndexed { r, pair ->
             val styleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             pair.forEachIndexed { i, s ->
                 val t = PictureTile(this, s.title, Prefs.style(this) == s, 168,
@@ -99,7 +99,7 @@ class SettingsActivity : Activity() {
                 styleTiles += s to t
                 styleRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(12) })
             }
-            // Ten styles, two by two
+            // Nine styles, two by two, in alphabetical order
             if (pair.size < 2) styleRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = px(12) })
             screen.add(styleRow, if (r > 0) px(14) else 0)
         }
@@ -121,7 +121,7 @@ class SettingsActivity : Activity() {
 
         // Finish: rows of three
         screen.section("Finish")
-        Finish.values().toList().chunked(3).forEachIndexed { r, trio ->
+        Finish.values().sortedBy { it.title }.chunked(3).forEachIndexed { r, trio ->
             val finishRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             trio.forEachIndexed { i, f ->
                 val t = PictureTile(this, f.title, Prefs.finish(this) == f, 132,
@@ -129,7 +129,7 @@ class SettingsActivity : Activity() {
                 finishTiles += f to t
                 finishRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = px(10) })
             }
-            // Seven finishes: the last row keeps the tiles' width
+            // Seven finishes, in alphabetical order: the last row keeps the tiles' width
             repeat(3 - trio.size) { finishRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = px(10) }) }
             screen.add(finishRow, if (r > 0) px(12) else 0)
         }
@@ -350,7 +350,7 @@ class SettingsActivity : Activity() {
             "The monolithic membrane" to "The grain is one body: a finger pushes the grain under it, and the grain around it yields and follows, then everything springs home.",
             "Concentrato" to "A fast fold leaves the bands emptier for a moment, so only the swing's trajectory reads; they fill back in as the grain settles.",
             "Giulietta" to "Nothing on the wallpaper is a control. The sun or moon, the battery's tide and the day's ring are read from the grain itself.",
-            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery, a tilt, the weather or picking the phone up moves something.",
+            "Nothing moves at rest" to "Frames are drawn only when a fold, a finger, the minute, the battery, the weather or a step moves something.",
         )
     }
 }

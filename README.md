@@ -6,25 +6,25 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 ## Styles
 
-**Solco.** Bands of grain on rings centred on the hinge: the left edge of the cover screen, the crease of the main screen. Opening the phone stirs the grain one way along its rings, closing it the other, with the outer grain carried first and furthest. Fine grooves fill the quiet middle.
-
-**Tronco.** Tree rings. One ring a day from the day Solco is first set, as wide as that day's unfolded use: pale early grain, then a dense line where the day closed. Today's ring is still growing. On the first day there is only a core.
-
-**Marea.** The grain fills to the battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still.
-
-**Duna.** Wind ripples blowing out from the hinge. Tilt past the angle of repose and the loosest grain runs downhill and heaps in the corner, as much as came; turn the phone and the heap pours round; level it and the wind blows it home.
-
-**Polvere.** Dust hangs in a shaft of light falling from the sun or moon. The longer the phone lies untouched, the more has settled to the floor; picking it up lifts it back into the light. With the moon set there is no shaft. The shaft is laid again as the sun moves on.
+In alphabetical order, as Settings shows them.
 
 **Delta.** Each charge of the past week carves a channel out from the hinge, as deep as the charge gave. The oldest silt up; the newest channel's banks wear the finish's accent. The plug is heard for as long as Solco is set, two broadcasts a charge. With no charges yet the sand is flat.
 
-**Pioggia.** The weather outside now, as a long exposure: rain in still streaks slanted by the real wind and as long as the rain is hard, snow in soft clumps that drift on the floor, a dry sky a haze as heavy as its cloud, one fork of lightning in a thunderstorm. Read from Open-Meteo (no key; only the place's latitude and longitude, to two places, are sent) every 20 minutes at most, and only while Pioggia is on screen.
+**Deserto.** One great dune across the crease, a true heightfield seen from a low eye and lit from the side the sun or moon is on, its backlit crest catching a rim in the accent; at night the sky above it holds a few stars. (Its own lock-screen clock was removed on 28 Nov 2026.)
 
-**Stagione.** One ray for each day of the year, fanned from the hinge, as long as that day's daylight at your place: the fan swells to midsummer and pinches at the winter solstice. Days gone are dense, days to come faint, today's ray wears the accent; a hair of bare sand marks each month.
+**Marea.** The grain fills to the battery's level, foam at the surface and sediment at the floor. On charge the surface breathes; otherwise it is still.
+
+**Orma.** Today's steps, pressed into the sand as a trail of footprints from the bottom of the glass. Brisk walking lengthens the stride, a run digs in the toes, and where you stood still the feet rest side by side. The morning's prints soften in the wind; the last hour's wear the accent. At midnight the sand is smooth again. Needs the physical activity permission, asked when Orma is chosen.
+
+**Pioggia.** The weather outside now, as a long exposure: rain in still streaks slanted by the real wind and as long as the rain is hard, snow in soft clumps that drift on the floor, a dry sky a haze as heavy as its cloud, one fork of lightning in a thunderstorm. Read from Open-Meteo (no key; only the place's latitude and longitude, to two places, are sent) every 20 minutes at most, and only while Pioggia is on screen.
 
 **Sentiero.** Raked gravel worn by your hand. Each touch on the home screen today presses a hollow with the gravel banked round it, and each swipe drags a path; the last hour's banks wear the accent. At midnight the garden is raked again. Kept on the phone, today only, and only while Sentiero is chosen.
 
-**Deserto.** One great dune across the crease, a true heightfield seen from a low eye and lit from the side the sun or moon is on, its backlit crest catching a rim in the accent. While the phone is locked the time stands in the sky behind the crest, in Italiana, as a depth effect does. A live wallpaper is drawn beneath the lock screen, so One UI's own clock cannot go behind the dune: Solco draws its own and shows it only while locked. Hide One UI's clock (Lock screen settings) to see it alone.
+**Solco.** Bands of grain on rings centred on the hinge: the left edge of the cover screen, the crease of the main screen. Opening the phone stirs the grain one way along its rings, closing it the other, with the outer grain carried first and furthest. Fine grooves fill the quiet middle.
+
+**Stagione.** One ray for each day of the year, fanned from the hinge, as long as that day's daylight at your place: the fan swells to midsummer and pinches at the winter solstice. Days gone are dense, days to come faint, today's ray wears the accent; a hair of bare sand marks each month.
+
+**Tronco.** Tree rings. One ring a day from the day Solco is first set, as wide as that day's unfolded use: pale early grain, then a dense line where the day closed. Today's ring is still growing. On the first day there is only a core.
 
 ## In every style
 
@@ -36,9 +36,9 @@ Built to Bellezza Necessaria, the Ferguson Consultancy Designs mandate: every el
 
 ## Finishes
 
-Visconti (green-black, champagne and ivory grain), Carbonio (black, ivory and rosso grain), Notte (midnight navy, ivory, champagne and slate grain), Tabacco (tobacco brown, cream, ochre and umber grain), Grafite (graphite, silver and smoke grain), Bronzo (warm black, bronze, copper and pale-gold grain) and Verderame (deep petrol, verdigris grain with copper: the patina to Bronzo's metal).
+In alphabetical order, as Settings shows them: Bronzo (warm black, bronze, copper and pale-gold grain), Carbonio (black, ivory and rosso grain), Grafite (graphite, silver and smoke grain), Notte (midnight navy, ivory, champagne and slate grain), Tabacco (tobacco brown, cream, ochre and umber grain), Verderame (deep petrol, verdigris grain with copper: the patina to Bronzo's metal) and Visconti (green-black, champagne and ivory grain).
 
-Seven styles and seven finishes, so a different pairing can be worn each day.
+Nine styles and seven finishes, so a different pairing can be worn each day.
 
 ## Battery
 

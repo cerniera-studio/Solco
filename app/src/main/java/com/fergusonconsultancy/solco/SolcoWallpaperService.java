@@ -78,9 +78,6 @@ public class SolcoWallpaperService extends WallpaperService {
         counting = sm.registerListener(stepListener, s, SensorManager.SENSOR_DELAY_NORMAL, 300_000_000);
     }
 
-    /** Polvere: when the wallpaper was last hidden, so its return knows how long the phone lay still. */
-    static long hiddenAt = 0L;
-
     @Override
     public void onCreate() {
         super.onCreate();
@@ -117,7 +114,7 @@ public class SolcoWallpaperService extends WallpaperService {
         return new SolcoEngine();
     }
 
-    private class SolcoEngine extends Engine implements SharedPreferences.OnSharedPreferenceChangeListener, SensorEventListener {
+    private class SolcoEngine extends Engine implements SharedPreferences.OnSharedPreferenceChangeListener {
 
         /** A GLSurfaceView that draws into the wallpaper's surface instead of its own. */
         private class GLView extends GLSurfaceView {
@@ -139,13 +136,8 @@ public class SolcoWallpaperService extends WallpaperService {
         private SolcoRenderer renderer;
         private boolean visible;
         private boolean tall = true;
-        private SensorManager sensors;
         private boolean listening;
         private int rotation;
-
-        private Sensor gravity;
-        private boolean tilting;
-        private float lastGx = 99f, lastGy = 99f;
 
         /** Marea: the battery's level and charging, as they change. */
         private final BroadcastReceiver battery = new BroadcastReceiver() {
@@ -161,21 +153,6 @@ public class SolcoWallpaperService extends WallpaperService {
             }
         };
 
-        /** Duna reads the tilt only while it is on screen; nothing else does. */
-        private void tiltSensor(boolean on) {
-            on = on && sensors != null && Prefs.INSTANCE.style(SolcoWallpaperService.this) == Style.DUNA;
-            if (on == tilting) return;
-            tilting = on;
-            if (on) {
-                gravity = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY);
-                if (gravity == null) gravity = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-                if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_GAME);
-            } else if (gravity != null) {
-                sensors.unregisterListener(this, gravity);
-                lastGx = 99f; lastGy = 99f;
-            }
-        }
-
         /** Pioggia: asks for the weather while it is on screen, at most every 20 minutes (see [Weather]). */
         private void weather() {
             Context c = SolcoWallpaperService.this;
@@ -188,8 +165,8 @@ public class SolcoWallpaperService extends WallpaperService {
         }
 
         /**
-         * Deserto: the phone locking and unlocking. The clock's grain is already laid, so a change
-         * only needs a frame. Heard for as long as the engine lives, since the screen goes dark first.
+         * The phone locking and unlocking, so the family's still is never taken from the lock screen.
+         * Heard for as long as the engine lives, since the screen goes dark first.
          */
         private final BroadcastReceiver lock = new BroadcastReceiver() {
             @Override
@@ -261,7 +238,6 @@ public class SolcoWallpaperService extends WallpaperService {
             lf.addAction(Intent.ACTION_USER_PRESENT);
             if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(lock, lf, Context.RECEIVER_NOT_EXPORTED);
             else c.registerReceiver(lock, lf);
-            sensors = (SensorManager) c.getSystemService(Context.SENSOR_SERVICE);
             // The hinge (the Kit's) is heard for as long as the wallpaper is set: the screen goes dark
             // before the hinge finishes moving, so a visible-only listener never had a fold's readings
             Diag.hinge(c, FoldWatch.listen(c));
@@ -318,9 +294,6 @@ public class SolcoWallpaperService extends WallpaperService {
             if (view == null) return;
             if (v) {
                 view.onResume();
-                // Polvere: how long the phone lay untouched, while the wallpaper was out of sight
-                final long rest = hiddenAt > 0L ? android.os.SystemClock.elapsedRealtime() - hiddenAt : 0L;
-                if (rest > 0L) view.queueEvent(() -> renderer.rest(rest));
                 listen(true);
                 // Orma: physical activity may have been allowed in Settings since the service began
                 countSteps();
@@ -329,7 +302,6 @@ public class SolcoWallpaperService extends WallpaperService {
                 arrive();
                 weather();
             } else {
-                hiddenAt = android.os.SystemClock.elapsedRealtime();
                 // Sentiero's trail, written once on the way out of sight rather than on every touch
                 Trail.INSTANCE.save(SolcoWallpaperService.this);
                 Steps.save(SolcoWallpaperService.this);
@@ -357,7 +329,6 @@ public class SolcoWallpaperService extends WallpaperService {
                 // Copertina (26 Nov 2026): Fold Widgets says the sleeve's colours changed; only ever a re-read
                 if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(copertina, new IntentFilter(Copertina.CHANGED), Context.RECEIVER_EXPORTED);
                 else c.registerReceiver(copertina, new IntentFilter(Copertina.CHANGED));
-                tiltSensor(true);
             } else {
                 try {
                     c.unregisterReceiver(clock);
@@ -375,36 +346,7 @@ public class SolcoWallpaperService extends WallpaperService {
                     c.unregisterReceiver(copertina);
                 } catch (IllegalArgumentException ignored) {
                 }
-                tiltSensor(false);
             }
-        }
-
-        @Override
-        public void onSensorChanged(SensorEvent e) {
-            int type = e.sensor.getType();
-            if (type == Sensor.TYPE_GRAVITY || type == Sensor.TYPE_ACCELEROMETER) {
-                if (view == null || e.values.length < 2) return;
-                // Gravity across the screen: device x to the right, device y up, so screen y is flipped;
-                // turned, the screen's axes are the device's turned with it
-                final float ax = e.values[0], ay = e.values[1];
-                final float gx, gy;
-                switch (rotation) {
-                    case 1: gx = ay; gy = -ax; break;
-                    case 2: gx = ax; gy = -ay; break;
-                    case 3: gx = -ay; gy = ax; break;
-                    default: gx = -ax; gy = ay;
-                }
-                // Fine steps (under a degree), which the grain then eases between, so the slide never lurches
-                if (Math.abs(gx - lastGx) + Math.abs(gy - lastGy) < 0.15f) return;
-                lastGx = gx; lastGy = gy;
-                view.queueEvent(() -> renderer.tilt(gx, gy));
-                view.requestRender();
-                return;
-            }
-        }
-
-        @Override
-        public void onAccuracyChanged(Sensor s, int accuracy) {
         }
 
         @Override
@@ -422,7 +364,6 @@ public class SolcoWallpaperService extends WallpaperService {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences p, String key) {
             if (!Prefs.isLook(key) || view == null) return;
-            if (visible) { tiltSensor(false); tiltSensor(true); }
             weather();
             view.queueEvent(() -> renderer.rebuild());
             view.requestRender();
@@ -440,7 +381,6 @@ public class SolcoWallpaperService extends WallpaperService {
             Trail.INSTANCE.save(SolcoWallpaperService.this);
             try { SolcoWallpaperService.this.unregisterReceiver(lock); } catch (IllegalArgumentException ignored) { }
             listen(false);
-            if (sensors != null) sensors.unregisterListener(this);
             FoldWatch.unlisten();
             if (view != null) {
                 view.destroy();

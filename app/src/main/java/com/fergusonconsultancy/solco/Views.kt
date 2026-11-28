@@ -79,9 +79,7 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
             // Orma: today's steps so far; before any are counted, the sample day, so the style can be seen
             walk = if (style == Style.ORMA) ormaWalk(context) else FloatArray(0),
             walkNow = if (style == Style.ORMA && Steps.count(context) == 0) Steps.SAMPLE_NOW else Steps.nowMinute(),
-            walkDay = java.time.LocalDate.now().toEpochDay(),
-            // Deserto: the preview always shows the clock, as the lock screen will
-            clock = if (style == Style.DESERTO) ClockPaint.mask(context, width, height, dp, FoldWatch.tall(width, height)) else null)
+            walkDay = java.time.LocalDate.now().toEpochDay())
         // Pioggia: a fresh reading if one is due, then the rain as it is now
         if (style == Style.PIOGGIA && Weather.due(context)) Weather.fetch(context) { post { if (Prefs.style(context) == Style.PIOGGIA) rebuild() } }
         back?.recycle(); disc?.recycle(); spark?.recycle()
@@ -97,8 +95,6 @@ class PreviewView(c: Context, private val aspect: Float, private val rotation: I
 
     fun stir(dir: Int) {
         scene?.stir(dir, false, false, SystemClock.uptimeMillis())
-        // Polvere: as if picked up after a while lying still, so the lift can be seen here
-        scene?.settle(.6f)
         invalidate()
     }
 
@@ -184,10 +180,7 @@ fun paintStill(c: Context, cv: Canvas, w: Int, h: Int, style: Style, f: Finish) 
         weather = if (style == Style.PIOGGIA) Wx.SAMPLE else null,
         season = if (style == Style.STAGIONE) Seasons.now() else null,
         trail = if (style == Style.SENTIERO) Trail.sample() else FloatArray(0),
-        clock = if (style == Style.DESERTO) ClockPaint.mask(c, w, h, dp, true) else null,
         walk = if (style == Style.ORMA) Steps.sample() else FloatArray(0), walkNow = Steps.SAMPLE_NOW, walkDay = 3L)
-    // Polvere's tile shows some dust on the floor, as after a while lying still
-    s.settle(.4f)
     val back = Backdrop.paint(s, f)
     val d = s.disc(sky)
     val disc = if (sky.shown) DiscPainter.paint(f, sky, Prefs.luna(c), d[2], dp) else null

@@ -93,8 +93,6 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (s.style == Style.SENTIERO && Trail.version != builtTrail && !tracking) dirtyBuild = true
         // Orma: a new day smooths the sand; new steps press new prints (relaid on the minute, never mid-step)
         if (s.style == Style.ORMA && (LocalDate.now() != builtDay || Steps.count(ctx) / 25 != builtSteps / 25)) dirtyBuild = true
-        // Deserto: a new minute while the clock shows
-        if (s.style == Style.DESERTO && (locked || preview) && builtMinute != minuteNow()) dirtyBuild = true
         // Pioggia: a new reading of the weather
         if (s.style == Style.PIOGGIA && (Weather.now(ctx)?.at ?: 0L) != builtWx) dirtyBuild = true
         // Copertina: the sleeve's colours (or the strength) changed since the grain was coloured
@@ -151,33 +149,15 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         }
     }
 
-    /** The tilt changed (Duna). Screen axes, y down. */
-    fun tilt(x: Float, y: Float) { scene?.tilt(x, y) }
-
-    /**
-     * Deserto: whether the phone is locked (the clock shows), or this is the system's preview (the
-     * clock shows so it can be seen before it is set), and the minute the clock was laid for.
-     */
+    /** Whether the phone is locked, or this is the system's preview: the family's still is taken at neither. */
     @Volatile var locked = false
     @Volatile var preview = false
-    @Volatile private var builtMinute = -1
-    private fun minuteNow() = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
-
-    /** Locked or unlocked: the clock's grain is already laid, so it only needs drawing or not. */
-    fun locked(v: Boolean) {
-        locked = v
-        val s = scene ?: return
-        if (v && s.style == Style.DESERTO && builtMinute != minuteNow()) dirtyBuild = true
-    }
+    fun locked(v: Boolean) { locked = v }
 
     /** What the last build was laid from: Pioggia's reading and Sentiero's trail. */
     @Volatile private var builtWx = 0L
     @Volatile private var builtTrail = -1
     @Volatile private var builtSteps = -1
-
-    /** Polvere: how long the phone lay untouched, applied once the grain for this screen is in place. */
-    private var pendingRest = 0L
-    fun rest(ms: Long) { pendingRest = ms }
 
     /** Everything a look needs, made away from the GL thread so the first frame never waits for it. */
     private class Prepared(val w: Int, val h: Int, val scene: Scene, val finish: Finish, val cols: FloatArray, val back: Bitmap, val ms: Long)
@@ -210,11 +190,8 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
                 builtTrail = Trail.version
                 builtSteps = if (style == Style.ORMA) Steps.count(ctx) else -1
                 builtCopertina = Copertina.read(ctx)
-                // Deserto: the clock is laid every time, so it is there the moment the phone locks
-                builtMinute = minuteNow()
-                val clk = if (style == Style.DESERTO) ClockPaint.mask(ctx, bw, bh, dp, FoldWatch.tall(bw, bh)) else null
                 val sc = Scene(bw, bh, dp, style, if (style == Style.TRONCO) Growth.rings(ctx) else FloatArray(0), level = lvl, charging = chg, rotation = rotation,
-                    sky = if (style == Style.POLVERE || style == Style.DESERTO || style == Style.ORMA) Sky.now(Prefs.notturno(ctx)) else null, clock = clk,
+                    sky = if (style == Style.DESERTO || style == Style.ORMA) Sky.now(Prefs.notturno(ctx)) else null,
                     charges = if (style == Style.DELTA) Charges.channels(ctx) else FloatArray(0),
                     weather = wx, season = if (style == Style.STAGIONE) Seasons.now() else null,
                     trail = if (style == Style.SENTIERO) Trail.points(ctx, FoldWatch.tall(bw, bh)) else FloatArray(0),
@@ -294,8 +271,6 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
     private fun paintSky() {
         val s = scene ?: return
         val sky = Sky.now(Prefs.notturno(ctx))
-        // Polvere's shaft falls from the disc: rebuilt once the sun or moon has moved on, or set
-        if (s.style == Style.POLVERE && (kotlin.math.abs(sky.alt - s.skyAlt) > .04f || sky.shown != s.skyShown)) dirtyBuild = true
         // Deserto: relit when the light crosses to the other side at noon, or night falls or lifts
         if (s.style == Style.DESERTO && ((sky.minutes < 720) != s.litMorning || !sky.day != s.atNight)) dirtyBuild = true
         // Orma: the prints are lit from the other side once the sun passes noon
@@ -341,11 +316,6 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             s.stir(pendingStir, pendingFast, Prefs.concentrato(ctx), now, Prefs.depth(ctx).grain, Prefs.linger(ctx).decay)
             pendingStir = 0
         }
-        // The dust that settled while the phone lay still, once this screen's grain is final
-        if (pendingRest > 0L && !dirtyBuild && !building && ready == null) {
-            if (s.style == Style.POLVERE) s.settle(Polvere.share(pendingRest))
-            pendingRest = 0L
-        }
         val moving = s.step(now)
 
         GLES20.glDisable(GLES20.GL_BLEND)
@@ -371,9 +341,7 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progPts, "uSize"), dot)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progPts, "uEmpty"), s.empty)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progPts, "uAlpha"), finish.grainA)
-            // Deserto's clock is the last of the grain: drawn only while the phone is locked
-            val count = if (s.style == Style.DESERTO && !(locked || preview)) min(s.clockFrom, s.n) else s.n
-            GLES20.glDrawArrays(GLES20.GL_POINTS, 0, count)
+            GLES20.glDrawArrays(GLES20.GL_POINTS, 0, s.n)
             GLES20.glDisableVertexAttribArray(aPos)
             GLES20.glDisableVertexAttribArray(aCol)
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
@@ -491,11 +459,4 @@ uniform sampler2D uTex;
 varying vec2 vUv;
 void main() { gl_FragColor = texture2D(uTex, vUv); }"""
     }
-}
-
-/** Polvere: how much of the dust in the light settles while the phone lies untouched. */
-object Polvere {
-    /** Half has settled after about an hour still; nearly all after four. Glances settle none. */
-    @JvmStatic fun share(restMs: Long): Float =
-        if (restMs < 30_000L) 0f else (1f - kotlin.math.exp(-(restMs - 30_000L) / 5_200_000f)).coerceIn(0f, .96f)
 }
