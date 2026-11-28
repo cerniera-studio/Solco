@@ -265,10 +265,13 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         dirtySky = true
         reported = false
         lastBuildMs = p.ms
+        stillDue = true
         Log.d(TAG, "built ${s.style.name} ${finish.name} ${w}x$h, ${s.n} grains in ${p.ms} ms, cover=${s.cover}")
     }
 
     private var lastBuildMs = 0L
+    /** A scene was just installed: save a new still on the next frame. */
+    private var stillDue = true
 
     /** The sleeve the grain was last coloured for ("" for the finish's own). */
     @Volatile private var builtCopertina = ""
@@ -381,6 +384,11 @@ class SolcoRenderer(private val ctx: Context, private val wake: Runnable) : GLSu
         if (shown) drawQuad(tex[1], disc[0] - half, disc[1] - half, disc[0] + half, disc[1] + half)
         for (p in sparks) { val hw = p[2] / 2f; drawQuad(tex[3], p[0] - hw, p[1] - hw, p[0] + hw, p[1] + hw) }
 
+        // A still for the family's glass (27 Nov 2026): after a build, then now and then; never while locked
+        if (!locked && !preview && !dirtyBuild && !building) {
+            runCatching { Still.maybe(ctx, w, h, s.cover, fresh = stillDue) }.onFailure { Log.w(TAG, "still", it) }
+            stillDue = false
+        }
         if (!reported) {
             reported = true
             val err = GLES20.glGetError()
